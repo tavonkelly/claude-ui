@@ -1,0 +1,23 @@
+<!doctype html>
+<title>Settings</title>
+<h1>Notifications</h1>
+<h2>What are you trying to find out?</h2>
+<fieldset>
+  <legend>Email me when someone:</legend>
+  <label><input type="checkbox"> Comments</label>
+  <label><input type="checkbox"> Mentions me</label>
+</fieldset>
+<label for="p">Phone (optional):</label><input id="p">
+<p class="hint">Format: 555-0100</p>
+<button>Save changes</button>
+<button aria-label="Delete file"><svg viewBox="0 0 8 8"></svg></button>
+<p role="status">Changes saved</p>
+<div class="empty"><p>No files</p><button>Upload files</button></div>
+<pre><code>Run this command to install every dependency the project needs before you start</code></pre>
+<script>
+const msg = 'Couldn\'t save changes. Check your connection.';
+document.querySelector('.status').textContent = 'Loading calendar…';
+const cls = 'flex items-center gap-2 rounded border';
+fetch('/api/items?limit=20');
+console.log('Something went wrong while loading the configuration file from disk, you can retry');
+</script>

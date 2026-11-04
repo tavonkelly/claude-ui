@@ -1,0 +1,20 @@
+{
+  "$schema": "https://code.claude.com/schemas/marketplace.json",
+  "name": "claude-ui-text",
+  "description": "UI text standard and checker for coding agents.",
+  "owner": {
+    "name": "Tavon Kelly",
+    "url": "https://github.com/tavonkelly"
+  },
+  "plugins": [
+    {
+      "name": "ui-text",
+      "source": "./",
+      "description": "A standard for UI text and a checker that flags explanatory, prose-like strings in the UI code an agent writes.",
+      "homepage": "https://github.com/tavonkelly/claude-ui-text",
+      "repository": "https://github.com/tavonkelly/claude-ui-text",
+      "license": "MIT",
+      "keywords": ["ui", "ux-writing", "microcopy", "content-design", "accessibility"]
+    }
+  ]
+}

@@ -1,0 +1,173 @@
+{
+  "bad.html": [
+    {
+      "rule": "long-text",
+      "text": "Short reports, each built"
+    },
+    {
+      "rule": "multi-sentence",
+      "text": "Short reports, each built"
+    },
+    {
+      "rule": "phrase",
+      "text": "Under the hood"
+    },
+    {
+      "rule": "instruction-label",
+      "text": "Enter your email address"
+    },
+    {
+      "rule": "generic-button",
+      "text": "Submit"
+    },
+    {
+      "rule": "generic-button",
+      "text": "OK"
+    },
+    {
+      "rule": "long-label",
+      "text": "Save all of my current changes now"
+    },
+    {
+      "rule": "long-text",
+      "text": "How quickly and how well"
+    },
+    {
+      "rule": "long-text",
+      "text": "After each change to the service"
+    },
+    {
+      "rule": "long-text",
+      "text": "The app shows a page only once"
+    },
+    {
+      "rule": "multi-sentence",
+      "text": "The app shows a page only once"
+    },
+    {
+      "rule": "phrase",
+      "text": "The question this page answers"
+    },
+    {
+      "rule": "phrase",
+      "text": "Please wait while we load"
+    },
+    {
+      "rule": "long-label",
+      "text": "What would you like to do"
+    }
+  ],
+  "good.html": [],
+  "bad.tsx": [
+    {
+      "rule": "long-label",
+      "text": "Here you can manage"
+    },
+    {
+      "rule": "phrase",
+      "text": "Here you can manage"
+    },
+    {
+      "rule": "long-text",
+      "text": "This dashboard shows"
+    },
+    {
+      "rule": "phrase",
+      "text": "This dashboard shows"
+    },
+    {
+      "rule": "generic-button",
+      "text": "Yes"
+    },
+    {
+      "rule": "phrase",
+      "text": "Simply type a name"
+    },
+    {
+      "rule": "phrase",
+      "text": "Click here to see"
+    },
+    {
+      "rule": "multi-sentence",
+      "text": "It looks like this folder is empty"
+    }
+  ],
+  "good.tsx": [],
+  "bad.dart": [
+    {
+      "rule": "long-text",
+      "text": "Welcome! This screen"
+    },
+    {
+      "rule": "phrase",
+      "text": "Welcome! This screen"
+    },
+    {
+      "rule": "instruction-label",
+      "text": "Enter your email"
+    },
+    {
+      "rule": "phrase",
+      "text": "Please use your work address"
+    },
+    {
+      "rule": "generic-button",
+      "text": "Submit"
+    },
+    {
+      "rule": "phrase",
+      "text": "Oops, something went wrong"
+    }
+  ],
+  "good.dart": [],
+  "bad.swift": [
+    {
+      "rule": "long-label",
+      "text": "Here you can change"
+    },
+    {
+      "rule": "phrase",
+      "text": "Here you can change"
+    },
+    {
+      "rule": "long-label",
+      "text": "Send me an email every time"
+    },
+    {
+      "rule": "generic-button",
+      "text": "OK"
+    },
+    {
+      "rule": "multi-sentence",
+      "text": "Thank you for using our app"
+    },
+    {
+      "rule": "phrase",
+      "text": "Thank you for using our app"
+    },
+    {
+      "rule": "long-label",
+      "text": "Your Account Settings Page Overview"
+    }
+  ],
+  "good.swift": [],
+  "bad.vue": [
+    {
+      "rule": "long-text",
+      "text": "Use this page to configure"
+    },
+    {
+      "rule": "phrase",
+      "text": "Use this page to configure"
+    },
+    {
+      "rule": "generic-button",
+      "text": "Yes"
+    },
+    {
+      "rule": "phrase",
+      "text": "Simply drag files here"
+    }
+  ],
+  "good.svelte": []
+}

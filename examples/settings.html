@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Settings</title>
+<style>
+  :root { --bg: #f7f7f5; --fg: #1d1f21; --muted: #5b6168; --line: #dcdcd6; --card: #fff; --accent: #2f5bd3; --danger: #b3261e; --ok: #1e7a46; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 640px; margin: 0 auto; padding: 32px 16px 96px; display: grid; gap: 24px; }
+  h1 { font-size: 24px; margin: 0; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 8px; padding: 16px 20px; display: grid; gap: 14px; }
+  h2 { font-size: 16px; margin: 0; }
+  fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; }
+  legend { font-weight: 600; margin-bottom: 6px; padding: 0; }
+  .field { display: grid; gap: 4px; max-width: 320px; }
+  label.check { display: flex; gap: 8px; align-items: center; }
+  select, button { font: inherit; }
+  select { padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); color: var(--fg); }
+  button { padding: 7px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.danger { color: var(--danger); border-color: var(--danger); }
+  button.danger.solid { background: var(--danger); color: #fff; }
+  .cal { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .cal .name { font-weight: 600; }
+  .cal .who { color: var(--muted); }
+  .chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #e3f2e9; color: var(--ok); }
+  .cal button { margin-left: auto; }
+  .empty { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--muted); }
+  footer { position: fixed; inset: auto 0 0 0; background: var(--card); border-top: 1px solid var(--line); padding: 12px 16px; display: flex; justify-content: center; gap: 12px; }
+  .toast { position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%); background: var(--fg); color: var(--bg); padding: 8px 14px; border-radius: 6px; }
+  .banner { border: 1px solid var(--danger); color: var(--danger); border-radius: 6px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  dialog { border: 1px solid var(--line); border-radius: 8px; padding: 20px; max-width: 360px; }
+  dialog h2 { margin-bottom: 8px; }
+  dialog .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Settings</h1>
+
+  <div class="banner" id="save-error" role="alert" hidden>
+    <span>Couldn't save changes</span>
+    <button type="button" id="retry">Try again</button>
+  </div>
+
+  <section aria-labelledby="h-notifications">
+    <h2 id="h-notifications">Notifications</h2>
+    <fieldset>
+      <legend>Email me when someone:</legend>
+      <label class="check"><input type="checkbox" checked> Invites me</label>
+      <label class="check"><input type="checkbox" checked> Changes an event</label>
+      <label class="check"><input type="checkbox"> Cancels an event</label>
+    </fieldset>
+    <div class="field">
+      <label for="reminder">Reminder:</label>
+      <select id="reminder">
+        <option>None</option>
+        <option>5 min before</option>
+        <option selected>15 min before</option>
+        <option>1 hour before</option>
+      </select>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-region">
+    <h2 id="h-region">Region</h2>
+    <div class="field">
+      <label for="tz">Time zone:</label>
+      <select id="tz">
+        <option selected>Pacific Time (Los Angeles)</option>
+        <option>Eastern Time (New York)</option>
+        <option>Central European Time (Berlin)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="week">Week starts on:</label>
+      <select id="week">
+        <option selected>Sunday</option>
+        <option>Monday</option>
+      </select>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-calendars">
+    <h2 id="h-calendars">Connected calendars</h2>
+    <div id="calendars">
+      <div class="cal">
+        <span class="name">Google Calendar</span>
+        <span class="who">work@example.com</span>
+        <span class="chip">Synced 2 min ago</span>
+        <button type="button" aria-label="Disconnect Google Calendar" id="disconnect">Disconnect</button>
+      </div>
+    </div>
+    <template id="calendars-empty">
+      <div class="empty">
+        <span>No calendars connected</span>
+        <button type="button" class="primary">Connect calendar</button>
+      </div>
+    </template>
+  </section>
+
+  <section aria-labelledby="h-account">
+    <h2 id="h-account">Account</h2>
+    <div><button type="button" class="danger" id="delete">Delete account</button></div>
+  </section>
+</main>
+
+<footer>
+  <button type="button" class="primary" id="save">Save changes</button>
+</footer>
+
+<dialog id="confirm" aria-labelledby="confirm-title">
+  <h2 id="confirm-title">Delete account?</h2>
+  <p>Deletes 214 events and 1 connected calendar. This cannot be undone.</p>
+  <div class="actions">
+    <button type="button" id="cancel">Cancel</button>
+    <button type="button" class="danger solid" id="confirm-delete">Delete account</button>
+  </div>
+</dialog>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  function toast(text) {
+    const t = document.createElement('div');
+    t.className = 'toast';
+    t.setAttribute('role', 'status');
+    t.textContent = text;
+    document.body.append(t);
+    setTimeout(() => t.remove(), 2500);
+  }
+  $('save').addEventListener('click', () => {
+    $('save').textContent = 'Saving…';
+    setTimeout(() => { $('save').textContent = 'Save changes'; toast('Changes saved'); }, 600);
+  });
+  $('retry').addEventListener('click', () => { $('save-error').hidden = true; $('save').click(); });
+  $('disconnect').addEventListener('click', () => {
+    $('calendars').replaceChildren($('calendars-empty').content.cloneNode(true));
+    toast('Google Calendar disconnected');
+  });
+  $('delete').addEventListener('click', () => $('confirm').showModal());
+  $('cancel').addEventListener('click', () => $('confirm').close());
+  $('confirm-delete').addEventListener('click', () => { $('confirm').close(); toast('Account deleted'); });
+</script>
+</body>
+</html>

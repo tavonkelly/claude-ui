@@ -1,0 +1,748 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Shelf file manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Mono:wght@400;500&family=Atkinson+Hyperlegible+Next:wght@400;600;700&display=swap">
+<style>
+/* Layout: app shell with a left nav and one working pane; under 720px the nav becomes a top row */
+:root {
+  --bg: #f2f4f7;
+  --surface: #ffffff;
+  --sunk: #e8ecf1;
+  --fg: #16202b;
+  --muted: #566372;
+  --line: #d3dae2;
+  --accent: #1f5fbf;
+  --accent-fg: #ffffff;
+  --accent-soft: #e1eaf8;
+  --danger: #b42318;
+  --danger-soft: #fbe8e6;
+  --ok: #16723e;
+  --ok-soft: #e1f2e7;
+  --ui: "Atkinson Hyperlegible Next", "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Atkinson Hyperlegible Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --r: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10151b; --surface: #171f29; --sunk: #0c1116; --fg: #e5eaf0; --muted: #98a4b1; --line: #29343f;
+    --accent: #6fa3f0; --accent-fg: #0a1320; --accent-soft: #1b2b43; --danger: #f1877b; --danger-soft: #3a1d1a;
+    --ok: #6dd09a; --ok-soft: #153222; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10151b; --surface: #171f29; --sunk: #0c1116; --fg: #e5eaf0; --muted: #98a4b1; --line: #29343f;
+  --accent: #6fa3f0; --accent-fg: #0a1320; --accent-soft: #1b2b43; --danger: #f1877b; --danger-soft: #3a1d1a;
+  --ok: #6dd09a; --ok-soft: #153222; color-scheme: dark;
+}
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.45 var(--ui); }
+* { box-sizing: border-box; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.vh { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+.app { display: grid; grid-template-columns: 216px minmax(0, 1fr); min-height: 100%; }
+.side { background: var(--surface); border-right: 1px solid var(--line); padding-block: 20px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: 16px; display: flex; flex-direction: column; gap: 20px; }
+.brand { font-weight: 700; font-size: 20px; letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
+.brand-mark { width: 22px; height: 18px; border: 2px solid var(--accent); border-top-width: 6px; border-radius: 3px; }
+nav { display: flex; flex-direction: column; gap: 2px; }
+nav a { color: var(--fg); text-decoration: none; padding: 7px 10px; border-radius: var(--r); }
+nav a:hover { background: var(--sunk); }
+nav a[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.side-foot { margin-top: auto; display: grid; gap: 10px; font-size: 14px; }
+.who { display: flex; align-items: center; gap: 8px; }
+.avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+.tag { justify-self: start; font-size: 12px; padding: 1px 8px; border-radius: 999px; border: 1px dashed var(--muted); color: var(--muted); }
+
+main { padding-block: 24px 120px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); min-width: 0; }
+.pane { max-width: 960px; display: grid; gap: 16px; }
+.head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+h1 { font-size: 24px; line-height: 1.2; margin: 0; margin-right: auto; text-wrap: balance; }
+h2 { font-size: 16px; margin: 0; }
+.search { position: relative; }
+.search input { width: 240px; max-width: 100%; padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
+
+.btn { padding: 7px 14px; border-radius: var(--r); border: 1px solid var(--line); background: var(--surface); cursor: pointer; white-space: nowrap; }
+.btn:hover { background: var(--sunk); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.08); }
+.btn.danger { color: var(--danger); border-color: var(--danger); }
+.btn.danger.solid { background: var(--danger); color: var(--surface); }
+.btn.link { border: 0; background: none; color: var(--accent); padding: 4px 6px; }
+.btn.link:hover { text-decoration: underline; background: none; }
+.btn.small { padding: 4px 10px; font-size: 14px; }
+
+.banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; border-radius: var(--r);
+  border: 1px solid var(--danger); background: var(--danger-soft); color: var(--danger); font-weight: 600; }
+.selbar { display: flex; align-items: center; gap: 12px; padding: 8px 12px; border-radius: var(--r); background: var(--accent-soft); flex-wrap: wrap; }
+.selbar strong { margin-right: auto; font-variant-numeric: tabular-nums; }
+
+.upload { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; display: grid; gap: 8px; }
+.upload-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.bar { height: 6px; background: var(--sunk); border-radius: 3px; overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+.upload ul { margin: 0; padding: 0; list-style: none; color: var(--danger); font-size: 14px; }
+
+.tablewrap { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+tr:last-child td { border-bottom: 0; }
+th { font-size: 13px; color: var(--muted); font-weight: 600; background: var(--sunk); }
+td.num, th.num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 14px; }
+td.when { color: var(--muted); }
+td.name { font-weight: 600; white-space: normal; min-width: 160px; }
+td.acts { text-align: right; }
+td.acts .btn + .btn { margin-left: 4px; }
+td.check, th.check { width: 36px; padding-right: 0; }
+tr.selected td { background: var(--accent-soft); }
+.skel { height: 12px; border-radius: 3px; background: var(--sunk); width: 70%; }
+@media (prefers-reduced-motion: no-preference) { .skel { animation: pulse 1.2s ease-in-out infinite alternate; } }
+@keyframes pulse { to { opacity: .45; } }
+
+.empty { background: var(--surface); border: 1px dashed var(--line); border-radius: var(--r); padding: 40px 16px; display: grid; justify-items: center; gap: 12px; color: var(--muted); }
+.empty strong { color: var(--fg); font-size: 17px; }
+
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px 18px; display: grid; gap: 12px; }
+fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 6px; }
+legend { font-weight: 600; padding: 0; margin-bottom: 6px; }
+.check-row { display: flex; align-items: center; gap: 8px; }
+.field { display: grid; gap: 4px; max-width: 360px; }
+.field label { font-weight: 600; }
+.field input, .field select { padding: 7px 10px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); width: 100%; }
+.field input[aria-invalid="true"] { border-color: var(--danger); }
+.hint { font-size: 13px; color: var(--muted); }
+.err { font-size: 13px; color: var(--danger); font-weight: 600; }
+.meter { height: 8px; border-radius: 4px; background: var(--sunk); overflow: hidden; max-width: 360px; }
+.meter > span { display: block; height: 100%; background: var(--accent); }
+.stat { font-variant-numeric: tabular-nums; }
+.row-end { display: flex; justify-content: flex-end; }
+
+.signin { min-height: 100%; display: grid; place-items: center; padding-block: 32px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.signin .card { width: 100%; max-width: 380px; padding: 24px; gap: 14px; }
+.signin .brand { margin-bottom: 4px; }
+
+dialog { border: 1px solid var(--line); border-radius: 10px; padding: 20px; width: min(440px, calc(100% - 32px)); background: var(--surface); color: var(--fg); }
+dialog::backdrop { background: rgba(10, 16, 24, .45); }
+dialog h2 { font-size: 18px; margin-bottom: 6px; overflow-wrap: anywhere; }
+dialog p { margin: 0 0 4px; color: var(--muted); }
+.actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; flex-wrap: wrap; }
+.people { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.people li { display: flex; align-items: center; gap: 10px; }
+.people .nm { margin-right: auto; }
+.people .role { color: var(--muted); font-size: 14px; }
+.people select { padding: 4px 8px; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
+.sep { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
+.linkrow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.chip { font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--sunk); color: var(--muted); font-weight: 600; }
+.chip.on { background: var(--ok-soft); color: var(--ok); }
+.linkrow .chip { margin-right: auto; }
+
+.toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(20px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 8px; z-index: 20; width: max-content; max-width: calc(100% - 32px); }
+.toast { background: var(--fg); color: var(--bg); padding: 9px 14px; border-radius: var(--r); display: flex; align-items: center; gap: 14px; box-shadow: 0 4px 16px rgba(0,0,0,.18); }
+.toast button { background: none; border: 0; color: var(--bg); font-weight: 700; text-decoration: underline; cursor: pointer; padding: 0; }
+
+.dev { position: fixed; right: max(12px, env(safe-area-inset-right, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px)); z-index: 15; font-size: 13px;
+  background: var(--surface); border: 1px dashed var(--muted); border-radius: var(--r); padding: 6px 10px; max-width: calc(100% - 24px); }
+.dev summary { cursor: pointer; color: var(--muted); font-weight: 600; }
+.dev .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 8px; }
+
+@media (max-width: 719px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .side { border-right: 0; border-bottom: 1px solid var(--line); flex-direction: row; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+    padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 12px; }
+  nav { flex-direction: row; flex-wrap: wrap; }
+  .side-foot { margin-top: 0; margin-left: auto; display: flex; align-items: center; }
+  .side-foot .tag { display: none; }
+  .search input { width: 100%; }
+  .search { flex: 1 1 100%; order: 3; }
+  .hide-sm { display: none; }
+}
+</style>
+<style>[hidden] { display: none !important; } body { margin: 0; } img { max-width: 100%; }</style>
+</head>
+<body>
+<div class="app" id="app">
+  <aside class="side">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Shelf</div>
+    <nav aria-label="Main">
+      <a href="#files">Files</a>
+      <a href="#shared">Shared</a>
+      <a href="#trash">Trash</a>
+      <a href="#prefs">Preferences</a>
+    </nav>
+    <div class="side-foot">
+      <span class="tag">Example data</span>
+      <div class="who"><span class="avatar" aria-hidden="true">MC</span><span>Maya Chen</span></div>
+      <button type="button" class="btn small" id="sign-out">Sign out</button>
+    </div>
+  </aside>
+
+  <main>
+    <div class="pane" id="view-list">
+      <div class="head">
+        <h1 id="list-title">Files</h1>
+        <div class="search">
+          <label class="vh" for="q">Search files</label>
+          <input type="search" id="q" placeholder="Search" autocomplete="off">
+        </div>
+        <button type="button" class="btn primary" id="upload-btn">Upload files</button>
+        <input type="file" id="upload-input" multiple hidden>
+      </div>
+
+      <div class="banner" id="load-error" role="alert" hidden>
+        <span>Couldn't load files</span>
+        <button type="button" class="btn small" id="load-retry">Try again</button>
+      </div>
+
+      <div class="upload" id="upload" hidden>
+        <div class="upload-head">
+          <strong id="upload-status" class="stat">Uploading 0 of 0</strong>
+          <button type="button" class="btn small" id="upload-cancel">Cancel upload</button>
+        </div>
+        <div class="bar"><span id="upload-bar" style="width:0%"></span></div>
+        <ul id="upload-errors"></ul>
+      </div>
+
+      <div class="selbar" id="selbar" hidden>
+        <strong id="sel-count">0 selected</strong>
+        <button type="button" class="btn small danger" id="sel-delete">Delete files</button>
+        <button type="button" class="btn small" id="sel-clear">Clear selection</button>
+      </div>
+
+      <div id="list-body"></div>
+      <p class="vh" role="status" id="list-status"></p>
+    </div>
+
+    <div class="pane" id="view-prefs" hidden>
+      <div class="head"><h1>Preferences</h1></div>
+      <div class="banner" id="save-error" role="alert" hidden>
+        <span>Couldn't save changes</span>
+        <button type="button" class="btn small" id="save-retry">Try again</button>
+      </div>
+      <form id="prefs-form" class="pane">
+        <section class="card" aria-labelledby="h-notif">
+          <h2 id="h-notif">Notifications</h2>
+          <fieldset>
+            <legend>Email me when someone:</legend>
+            <label class="check-row"><input type="checkbox" id="n-share" checked> Shares a file</label>
+            <label class="check-row"><input type="checkbox" id="n-comment" checked> Comments on a file</label>
+            <label class="check-row"><input type="checkbox" id="n-request"> Requests access</label>
+          </fieldset>
+        </section>
+        <section class="card" aria-labelledby="h-sharing">
+          <h2 id="h-sharing">Sharing</h2>
+          <div class="field">
+            <label for="default-access">Default access:</label>
+            <select id="default-access">
+              <option value="view" selected>Can view</option>
+              <option value="edit">Can edit</option>
+            </select>
+          </div>
+          <label class="check-row"><input type="checkbox" id="allow-links" checked> Allow link sharing</label>
+        </section>
+        <section class="card" aria-labelledby="h-storage">
+          <h2 id="h-storage">Storage</h2>
+          <div class="stat" id="storage-text">18.2 GB of 30 GB used</div>
+          <div class="meter" role="img" id="storage-meter" aria-label="Storage used"><span id="storage-fill" style="width:61%"></span></div>
+        </section>
+        <section class="card" aria-labelledby="h-account">
+          <h2 id="h-account">Account</h2>
+          <div><button type="button" class="btn danger" id="delete-account">Delete account</button></div>
+        </section>
+        <div class="row-end"><button type="submit" class="btn primary" id="save-prefs">Save changes</button></div>
+      </form>
+    </div>
+  </main>
+</div>
+
+<div class="signin" id="view-signin" hidden>
+  <form class="card" id="signin-form" novalidate>
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Shelf</div>
+    <h1>Sign in</h1>
+    <div class="banner" id="signin-error" role="alert" hidden><span>Wrong password. Try again or reset it.</span></div>
+    <div class="field">
+      <label for="email">Email:</label>
+      <input type="email" id="email" autocomplete="email" aria-describedby="email-err">
+      <span class="err" id="email-err" hidden>Use an email like name@example.com</span>
+    </div>
+    <div class="field">
+      <label for="password">Password:</label>
+      <input type="password" id="password" autocomplete="current-password">
+    </div>
+    <label class="check-row"><input type="checkbox" id="stay" checked> Stay signed in</label>
+    <button type="submit" class="btn primary" id="signin-btn">Sign in</button>
+    <div><button type="button" class="btn link" id="reset">Reset password</button></div>
+  </form>
+</div>
+
+<dialog id="confirm" aria-labelledby="confirm-title">
+  <h2 id="confirm-title">Delete file?</h2>
+  <p id="confirm-body"></p>
+  <div class="actions">
+    <button type="button" class="btn" id="confirm-cancel">Cancel</button>
+    <button type="button" class="btn danger solid" id="confirm-ok">Delete file</button>
+  </div>
+</dialog>
+
+<dialog id="share" aria-labelledby="share-title">
+  <h2 id="share-title">Share file</h2>
+  <form id="invite-form" novalidate>
+    <div class="field">
+      <label for="invite">Invite:</label>
+      <input type="text" id="invite" autocomplete="off" aria-describedby="invite-hint invite-err">
+      <span class="hint" id="invite-hint">Separate emails with commas</span>
+      <span class="err" id="invite-err" hidden>Use an email like name@example.com</span>
+    </div>
+    <div class="field">
+      <label for="invite-access">Access:</label>
+      <select id="invite-access">
+        <option value="view">Can view</option>
+        <option value="edit">Can edit</option>
+      </select>
+    </div>
+    <div class="actions"><button type="submit" class="btn primary" id="invite-send">Send invite</button></div>
+  </form>
+  <hr class="sep">
+  <h2>People with access</h2>
+  <ul class="people" id="people"></ul>
+  <hr class="sep">
+  <div class="linkrow">
+    <label class="check-row"><input type="checkbox" id="link-toggle"> Link sharing</label>
+    <span class="chip" id="link-state">Off</span>
+    <button type="button" class="btn small" id="copy-link" disabled>Copy link</button>
+  </div>
+  <div class="actions"><button type="button" class="btn" id="share-close">Close</button></div>
+</dialog>
+
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+
+<details class="dev" id="dev">
+  <summary>Demo states</summary>
+  <div class="grid">
+    <button type="button" class="btn small" data-state="ready">Ready</button>
+    <button type="button" class="btn small" data-state="loading">Loading</button>
+    <button type="button" class="btn small" data-state="empty">Empty</button>
+    <button type="button" class="btn small" data-state="error">Load error</button>
+    <button type="button" class="btn small" data-state="upload">Uploading</button>
+    <button type="button" class="btn small" data-state="save-error">Save error</button>
+    <button type="button" class="btn small" data-state="signin-error">Sign-in error</button>
+    <button type="button" class="btn small" data-state="theme">Theme</button>
+  </div>
+</details>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const ME = 'Maya Chen';
+  const now = Date.now(), H = 3600e3, D = 24 * H;
+  const seed = () => ({
+    files: [
+      { id: 1, name: 'Q3 budget.xlsx', owner: ME, modified: now - 2 * H, size: 482e3 },
+      { id: 2, name: 'Launch plan.docx', owner: ME, modified: now - 26 * H, size: 1.2e6 },
+      { id: 3, name: 'Brand assets.zip', owner: 'Sam Ortiz', modified: now - 3 * D, size: 18.4e6 },
+      { id: 4, name: 'Team photo.jpg', owner: ME, modified: now - 9 * D, size: 3.6e6 },
+      { id: 5, name: 'Contract draft.pdf', owner: 'Priya Nair', modified: now - 20 * D, size: 640e3 },
+      { id: 6, name: 'Roadmap 2027.key', owner: ME, modified: now - 40 * D, size: 7.9e6 }
+    ],
+    trash: [
+      { id: 7, name: 'Contract v1.pdf', owner: ME, deleted: now - 7 * D, size: 610e3 },
+      { id: 8, name: 'Old logo.svg', owner: ME, deleted: now - 26 * D, size: 24e3 }
+    ],
+    people: { 1: [{ name: 'Sam Ortiz', access: 'edit' }] },
+    links: {}
+  });
+  let db = seed();
+  const S = { view: 'files', mode: 'ready', q: '', sel: new Set(), uploadTimer: null, shareId: null, confirmFn: null };
+  let nextId = 100;
+
+  const lang = navigator.language || 'en';
+  const rtf = new Intl.RelativeTimeFormat(lang, { numeric: 'auto' });
+  const dtf = new Intl.DateTimeFormat(lang, { month: 'short', day: 'numeric', year: 'numeric' });
+  const mb = new Intl.NumberFormat(lang, { style: 'unit', unit: 'megabyte', maximumFractionDigits: 1 });
+  const kb = new Intl.NumberFormat(lang, { style: 'unit', unit: 'kilobyte', maximumFractionDigits: 0 });
+  const gb = new Intl.NumberFormat(lang, { style: 'unit', unit: 'gigabyte', maximumFractionDigits: 1 });
+  const days = new Intl.NumberFormat(lang, { style: 'unit', unit: 'day', unitDisplay: 'long' });
+  const when = (t) => {
+    const diff = t - Date.now();
+    if (Math.abs(diff) < H) return rtf.format(Math.round(diff / 60e3), 'minute');
+    if (Math.abs(diff) < D) return rtf.format(Math.round(diff / H), 'hour');
+    if (Math.abs(diff) < 7 * D) return rtf.format(Math.round(diff / D), 'day');
+    return dtf.format(t);
+  };
+  const size = (b) => (b >= 1e6 ? mb.format(b / 1e6) : kb.format(Math.max(1, b / 1e3)));
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const plural = (n, one, many) => n + ' ' + (n === 1 ? one : many);
+
+  function toast(text, action) {
+    const t = document.createElement('div');
+    t.className = 'toast';
+    const span = document.createElement('span');
+    span.textContent = text;
+    t.append(span);
+    if (action) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = action.label;
+      b.addEventListener('click', () => { action.run(); t.remove(); });
+      t.append(b);
+    }
+    $('toasts').append(t);
+    setTimeout(() => t.remove(), action ? 6000 : 3000);
+  }
+
+  function confirmBox(title, body, okLabel, run) {
+    $('confirm-title').textContent = title;
+    $('confirm-body').textContent = body;
+    $('confirm-body').hidden = !body;
+    $('confirm-ok').textContent = okLabel;
+    S.confirmFn = run;
+    $('confirm').showModal();
+  }
+  $('confirm-cancel').addEventListener('click', () => $('confirm').close());
+  $('confirm-ok').addEventListener('click', () => { $('confirm').close(); if (S.confirmFn) S.confirmFn(); });
+
+  /* ---------- list views ---------- */
+  const titles = { files: 'Files', shared: 'Shared', trash: 'Trash' };
+  const source = () => S.view === 'trash' ? db.trash : S.view === 'shared' ? db.files.filter((f) => f.owner !== ME) : db.files;
+
+  function emptyState(title, btnLabel, btnId) {
+    return `<div class="empty"><strong>${esc(title)}</strong>${btnLabel ? `<button type="button" class="btn primary" id="${btnId}">${esc(btnLabel)}</button>` : ''}</div>`;
+  }
+
+  function renderList() {
+    const v = S.view;
+    $('list-title').textContent = titles[v];
+    $('upload-btn').hidden = v !== 'files';
+    $('load-error').hidden = S.mode !== 'error';
+    const body = $('list-body');
+    const all = S.mode === 'empty' ? [] : source();
+    const q = S.q.trim().toLowerCase();
+    const rows = all.filter((f) => f.name.toLowerCase().includes(q));
+    [...S.sel].forEach((id) => { if (!rows.some((r) => r.id === id)) S.sel.delete(id); });
+    renderSelbar();
+
+    if (S.mode === 'loading') {
+      const sk = '<tr><td class="check"></td><td><div class="skel"></div></td><td class="hide-sm"><div class="skel"></div></td><td><div class="skel"></div></td><td class="hide-sm"><div class="skel"></div></td><td></td></tr>';
+      body.innerHTML = `<div class="tablewrap"><table aria-busy="true"><tbody>${sk.repeat(5)}</tbody></table></div>`;
+      $('list-status').textContent = 'Loading files…';
+      return;
+    }
+    $('list-status').textContent = '';
+    if (S.mode === 'error') { body.innerHTML = ''; return; }
+    if (!all.length) {
+      body.innerHTML = v === 'files' ? emptyState('No files yet', 'Upload files', 'empty-upload')
+        : v === 'shared' ? emptyState('Nothing shared yet') : emptyState('Trash is empty');
+      const b = $('empty-upload');
+      if (b) b.addEventListener('click', () => $('upload-input').click());
+      return;
+    }
+    if (!rows.length) {
+      body.innerHTML = emptyState(`No results for "${S.q.trim()}"`, 'Clear search', 'clear-search');
+      $('clear-search').addEventListener('click', () => { S.q = ''; $('q').value = ''; renderList(); $('q').focus(); });
+      return;
+    }
+    if (v === 'trash') {
+      body.innerHTML = `<div class="tablewrap"><table>
+        <thead><tr><th>Name</th><th>Deleted</th><th class="num">Deletes in</th><th class="num hide-sm">Size</th><th><span class="vh">Actions</span></th></tr></thead>
+        <tbody>${rows.map((f) => `<tr>
+          <td class="name">${esc(f.name)}</td>
+          <td class="when">${esc(when(f.deleted))}</td>
+          <td class="num">${esc(days.format(Math.max(1, 30 - Math.floor((Date.now() - f.deleted) / D))))}</td>
+          <td class="num hide-sm">${esc(size(f.size))}</td>
+          <td class="acts"><button type="button" class="btn small" data-restore="${f.id}" aria-label="Restore ${esc(f.name)}">Restore</button><button type="button" class="btn small danger" data-purge="${f.id}" aria-label="Delete forever ${esc(f.name)}">Delete forever</button></td>
+        </tr>`).join('')}</tbody></table></div>`;
+      return;
+    }
+    const selectable = v === 'files';
+    const allSel = selectable && rows.every((r) => S.sel.has(r.id));
+    body.innerHTML = `<div class="tablewrap"><table>
+      <thead><tr>
+        <th class="check">${selectable ? `<input type="checkbox" id="sel-all" aria-label="All files"${allSel ? ' checked' : ''}>` : ''}</th>
+        <th>Name</th><th class="hide-sm">Owner</th><th>Modified</th><th class="num hide-sm">Size</th><th><span class="vh">Actions</span></th>
+      </tr></thead>
+      <tbody>${rows.map((f) => `<tr class="${S.sel.has(f.id) ? 'selected' : ''}">
+        <td class="check">${selectable ? `<input type="checkbox" data-sel="${f.id}" aria-label="${esc(f.name)}"${S.sel.has(f.id) ? ' checked' : ''}>` : ''}</td>
+        <td class="name">${esc(f.name)}</td>
+        <td class="hide-sm">${esc(f.owner)}</td>
+        <td class="when">${esc(when(f.modified))}</td>
+        <td class="num hide-sm">${esc(size(f.size))}</td>
+        <td class="acts">${f.owner === ME ? `<button type="button" class="btn small" data-share="${f.id}" aria-label="Share ${esc(f.name)}">Share</button><button type="button" class="btn small" data-del="${f.id}" aria-label="Delete ${esc(f.name)}">Delete</button>` : ''}</td>
+      </tr>`).join('')}</tbody></table></div>`;
+    const sa = $('sel-all');
+    if (sa) sa.addEventListener('change', () => { rows.forEach((r) => sa.checked ? S.sel.add(r.id) : S.sel.delete(r.id)); renderList(); });
+  }
+
+  function renderSelbar() {
+    const n = S.sel.size;
+    $('selbar').hidden = n === 0 || S.view !== 'files';
+    $('sel-count').textContent = n + ' selected';
+    $('sel-delete').textContent = n === 1 ? 'Delete file' : 'Delete files';
+  }
+
+  $('list-body').addEventListener('change', (e) => {
+    const id = Number(e.target.dataset.sel);
+    if (!id) return;
+    e.target.checked ? S.sel.add(id) : S.sel.delete(id);
+    renderList();
+  });
+
+  function moveToTrash(ids) {
+    const moved = db.files.filter((f) => ids.includes(f.id));
+    db.files = db.files.filter((f) => !ids.includes(f.id));
+    moved.forEach((f) => db.trash.unshift({ id: f.id, name: f.name, owner: f.owner, deleted: Date.now(), size: f.size, was: f }));
+    ids.forEach((id) => S.sel.delete(id));
+    renderList();
+    const label = moved.length === 1 ? moved[0].name + ' moved to Trash' : plural(moved.length, 'file', 'files') + ' moved to Trash';
+    toast(label, { label: 'Undo', run: () => {
+      db.trash = db.trash.filter((t) => !ids.includes(t.id));
+      db.files = db.files.concat(moved).sort((a, b) => b.modified - a.modified);
+      renderList();
+    } });
+  }
+
+  $('list-body').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.del) {
+      const f = db.files.find((x) => x.id === Number(b.dataset.del));
+      confirmBox(`Delete ${f.name}?`, 'It stays in Trash for 30 days.', 'Delete file', () => moveToTrash([f.id]));
+    } else if (b.dataset.share) {
+      openShare(Number(b.dataset.share));
+    } else if (b.dataset.restore) {
+      const t = db.trash.find((x) => x.id === Number(b.dataset.restore));
+      db.trash = db.trash.filter((x) => x !== t);
+      db.files.push(t.was || { id: t.id, name: t.name, owner: t.owner, modified: t.deleted, size: t.size });
+      db.files.sort((a, c) => c.modified - a.modified);
+      renderList();
+      toast(t.name + ' restored');
+    } else if (b.dataset.purge) {
+      const t = db.trash.find((x) => x.id === Number(b.dataset.purge));
+      confirmBox(`Delete ${t.name} forever?`, 'This cannot be undone.', 'Delete forever', () => {
+        db.trash = db.trash.filter((x) => x !== t);
+        renderList();
+        toast(t.name + ' deleted');
+      });
+    }
+  });
+
+  $('sel-delete').addEventListener('click', () => {
+    const ids = [...S.sel];
+    const n = ids.length;
+    confirmBox(n === 1 ? 'Delete 1 file?' : `Delete ${n} files?`, 'They stay in Trash for 30 days.', n === 1 ? 'Delete file' : 'Delete files', () => moveToTrash(ids));
+  });
+  $('sel-clear').addEventListener('click', () => { S.sel.clear(); renderList(); });
+  $('q').addEventListener('input', (e) => { S.q = e.target.value; renderList(); });
+  $('load-retry').addEventListener('click', () => { setMode('loading'); setTimeout(() => setMode('ready'), 900); });
+
+  /* ---------- upload ---------- */
+  const LIMIT = 25e6;
+  $('upload-btn').addEventListener('click', () => $('upload-input').click());
+  $('upload-input').addEventListener('change', (e) => {
+    startUpload([...e.target.files].map((f) => ({ name: f.name, size: f.size })));
+    e.target.value = '';
+  });
+
+  function startUpload(list) {
+    if (!list.length) return;
+    clearInterval(S.uploadTimer);
+    const ok = list.filter((f) => f.size <= LIMIT);
+    const tooBig = list.filter((f) => f.size > LIMIT);
+    $('upload').hidden = false;
+    $('upload-errors').innerHTML = tooBig.map((f) => `<li>${esc(f.name)} is over 25 MB</li>`).join('');
+    let done = 0;
+    const tick = () => {
+      $('upload-status').textContent = ok.length ? `Uploading ${Math.min(done + 1, ok.length)} of ${ok.length}` : 'Nothing uploaded';
+      $('upload-bar').style.width = (ok.length ? Math.round((done / ok.length) * 100) : 0) + '%';
+    };
+    tick();
+    if (!ok.length) { $('upload-cancel').textContent = 'Close'; return; }
+    $('upload-cancel').textContent = 'Cancel upload';
+    S.uploadTimer = setInterval(() => {
+      const f = ok[done];
+      db.files.unshift({ id: nextId++, name: f.name, owner: ME, modified: Date.now(), size: f.size });
+      done++;
+      tick();
+      if (done >= ok.length) {
+        clearInterval(S.uploadTimer);
+        if (!tooBig.length) $('upload').hidden = true;
+        else { $('upload-status').textContent = plural(done, 'file', 'files') + ' uploaded'; $('upload-cancel').textContent = 'Close'; }
+        renderList();
+        toast(done === 1 ? f.name + ' uploaded' : plural(done, 'file', 'files') + ' uploaded');
+      } else {
+        renderList();
+      }
+    }, 700);
+  }
+  $('upload-cancel').addEventListener('click', () => {
+    const wasRunning = $('upload-cancel').textContent === 'Cancel upload';
+    clearInterval(S.uploadTimer);
+    $('upload').hidden = true;
+    if (wasRunning) toast('Upload canceled');
+  });
+
+  /* ---------- share ---------- */
+  function renderPeople() {
+    const list = db.people[S.shareId] || [];
+    const owner = `<li><span class="avatar" aria-hidden="true">MC</span><span class="nm">${esc(ME)}</span><span class="role">Owner</span></li>`;
+    $('people').innerHTML = owner + list.map((p, i) => `<li>
+      <span class="avatar" aria-hidden="true">${esc(p.name.split(/\s+/).map((w) => w[0]).join('').slice(0, 2).toUpperCase())}</span>
+      <span class="nm">${esc(p.name)}</span>
+      <label class="vh" for="acc-${i}">Access for ${esc(p.name)}</label>
+      <select id="acc-${i}" data-acc="${i}"><option value="view"${p.access === 'view' ? ' selected' : ''}>Can view</option><option value="edit"${p.access === 'edit' ? ' selected' : ''}>Can edit</option></select>
+      <button type="button" class="btn small" data-remove="${i}" aria-label="Remove ${esc(p.name)}">Remove</button>
+    </li>`).join('');
+  }
+  function renderLink() {
+    const on = !!db.links[S.shareId];
+    $('link-toggle').checked = on;
+    $('link-state').textContent = on ? 'On' : 'Off';
+    $('link-state').classList.toggle('on', on);
+    $('copy-link').disabled = !on;
+  }
+  function openShare(id) {
+    S.shareId = id;
+    const f = db.files.find((x) => x.id === id);
+    $('share-title').textContent = 'Share ' + f.name;
+    $('invite').value = '';
+    $('invite-err').hidden = true;
+    $('invite').removeAttribute('aria-invalid');
+    renderPeople();
+    renderLink();
+    $('share').showModal();
+  }
+  $('share-close').addEventListener('click', () => $('share').close());
+  $('people').addEventListener('change', (e) => {
+    const i = e.target.dataset.acc;
+    if (i === undefined) return;
+    db.people[S.shareId][i].access = e.target.value;
+    toast('Access changed');
+  });
+  $('people').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-remove]');
+    if (!b) return;
+    const p = db.people[S.shareId].splice(Number(b.dataset.remove), 1)[0];
+    renderPeople();
+    toast(p.name + ' removed');
+  });
+  $('invite-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const emails = $('invite').value.split(',').map((s) => s.trim()).filter(Boolean);
+    const bad = !emails.length || emails.some((m) => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(m));
+    $('invite-err').hidden = !bad;
+    if (bad) { $('invite').setAttribute('aria-invalid', 'true'); $('invite').focus(); return; }
+    $('invite').removeAttribute('aria-invalid');
+    const list = db.people[S.shareId] || (db.people[S.shareId] = []);
+    emails.forEach((m) => list.push({ name: m, access: $('invite-access').value }));
+    $('invite').value = '';
+    renderPeople();
+    toast(emails.length === 1 ? 'Invite sent' : plural(emails.length, 'invite', 'invites') + ' sent');
+  });
+  $('link-toggle').addEventListener('change', (e) => {
+    db.links[S.shareId] = e.target.checked;
+    renderLink();
+    toast(e.target.checked ? 'Link sharing on' : 'Link sharing off');
+  });
+  $('copy-link').addEventListener('click', () => {
+    const url = 'https://shelf.example/f/' + S.shareId;
+    const done = () => toast('Link copied');
+    try { navigator.clipboard.writeText(url).then(done, () => toast(url)); } catch (err) { toast(url); }
+  });
+
+  /* ---------- preferences ---------- */
+  function renderStorage() {
+    const used = db.files.concat(db.trash).reduce((s, f) => s + f.size, 0) + 18.17e9;
+    $('storage-text').textContent = `${gb.format(used / 1e9)} of ${gb.format(30)} used`;
+    const pct = Math.min(100, Math.round((used / 30e9) * 100));
+    $('storage-fill').style.width = pct + '%';
+    $('storage-meter').setAttribute('aria-label', pct + '% of storage used');
+  }
+  $('prefs-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    $('save-error').hidden = true;
+    const b = $('save-prefs');
+    b.textContent = 'Saving…';
+    b.disabled = true;
+    setTimeout(() => { b.textContent = 'Save changes'; b.disabled = false; toast('Changes saved'); }, 600);
+  });
+  $('save-retry').addEventListener('click', () => $('prefs-form').requestSubmit());
+  $('delete-account').addEventListener('click', () => {
+    const n = db.files.filter((f) => f.owner === ME).length + db.trash.length;
+    confirmBox('Delete account?', `Deletes ${plural(n, 'file', 'files')} and all shared links. This cannot be undone.`, 'Delete account', () => {
+      db = seed();
+      go('sign-in');
+      toast('Account deleted');
+    });
+  });
+
+  /* ---------- sign in ---------- */
+  $('signin-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const email = $('email').value.trim();
+    const bad = !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
+    $('email-err').hidden = !bad;
+    $('email').toggleAttribute('aria-invalid', bad);
+    if (bad) { $('email').focus(); return; }
+    $('signin-error').hidden = true;
+    go('files');
+  });
+  $('reset').addEventListener('click', () => {
+    const email = $('email').value.trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { $('email-err').hidden = false; $('email').focus(); return; }
+    toast('Reset link sent to ' + email);
+  });
+  $('sign-out').addEventListener('click', () => { go('sign-in'); toast('Signed out'); });
+
+  /* ---------- routing and demo states ---------- */
+  const VIEWS = ['files', 'shared', 'trash', 'prefs', 'sign-in'];
+  function go(v) { if (location.hash !== '#' + v) location.hash = v; else route(); }
+  function route() {
+    const v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'files';
+    if (v !== S.view) { S.sel.clear(); S.q = ''; $('q').value = ''; }
+    S.view = v;
+    const signin = v === 'sign-in';
+    $('app').hidden = signin;
+    $('view-signin').hidden = !signin;
+    $('view-prefs').hidden = v !== 'prefs';
+    $('view-list').hidden = signin || v === 'prefs';
+    document.querySelectorAll('nav a').forEach((a) => a.setAttribute('aria-current', a.getAttribute('href') === '#' + v ? 'page' : 'false'));
+    if (v === 'prefs') renderStorage();
+    else if (!signin) renderList();
+  }
+  function setMode(m) { S.mode = m; renderList(); }
+  window.addEventListener('hashchange', route);
+
+  $('dev').addEventListener('click', (e) => {
+    const s = e.target.dataset && e.target.dataset.state;
+    if (!s) return;
+    if (s === 'theme') {
+      const root = document.documentElement;
+      const dark = root.dataset.theme ? root.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+      root.dataset.theme = dark ? 'light' : 'dark';
+      return;
+    }
+    if (s === 'signin-error') { go('sign-in'); $('signin-error').hidden = false; return; }
+    if (s === 'save-error') { go('prefs'); $('save-error').hidden = false; return; }
+    if (S.view === 'prefs' || S.view === 'sign-in') go('files');
+    if (s === 'upload') {
+      setMode('ready');
+      startUpload([
+        { name: 'Invoice 0142.pdf', size: 220e3 }, { name: 'Site photos.zip', size: 14.2e6 },
+        { name: 'Notes.txt', size: 4e3 }, { name: 'Walkthrough.mov', size: 61e6 }
+      ]);
+      return;
+    }
+    if (s === 'loading') { setMode('loading'); setTimeout(() => { if (S.mode === 'loading') setMode('ready'); }, 2500); return; }
+    setMode(s);
+  });
+
+  route();
+})();
+</script>
+</body>
+</html>

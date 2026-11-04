@@ -1,0 +1,21 @@
+<!doctype html>
+<title>Fixture</title>
+<header>
+  <h1>Reports</h1>
+  <h2>What would you like to do with all of these files today?</h2>
+  <p class="lede">Short reports, each built from one data source and refreshed every hour. Open them here, or fetch them from code with a token.</p>
+</header>
+<details><summary>Under the hood</summary><div id="log"></div></details>
+<form>
+  <label for="e">Enter your email address</label><input id="e">
+  <button type="submit">Submit</button>
+  <button>OK</button>
+  <button>Save all of my current changes now</button>
+</form>
+<script>
+const bench = 'How quickly and how well the service turns a request into a finished report.';
+const note = 'After each change to the service, a fixed set of tasks runs from request to report, and that version gets a row.';
+el.innerHTML = `<p>${esc(e.body || "The app shows a page only once the server has written it, so there's nothing to show until it's back. Your question and window are kept.")}</p>`;
+el.innerHTML = `<p class="hint">The question this page answers: type a question or a pipe query</p>`;
+toast('Please wait while we load your calendar');
+</script>
