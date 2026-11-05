@@ -1,6 +1,6 @@
 {
   "name": "ui-standards",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "Standards for UI text and layout, with a checker that flags prose-like strings, nested cards, extra primary actions and off-scale spacing in the UI code an agent writes.",
   "author": {
     "name": "Tavon Kelly",
