@@ -111,6 +111,9 @@ tr.selected td { background: var(--accent-soft); }
 .prefs { display: grid; gap: 24px; }
 .prefs section { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 16px 24px; padding-top: 24px; border-top: 1px solid var(--line); }
 .controls { display: grid; gap: 16px; align-content: start; }
+/* Save lines up with the controls it saves, not with the section names */
+.save-row { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 16px 24px; }
+.save-row > * { grid-column: 2; }
 fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; }
 legend { font-weight: 600; padding: 0; margin-bottom: 8px; }
 .check-row { display: flex; align-items: center; gap: 8px; min-height: 24px; }
@@ -163,6 +166,8 @@ dialog form { display: grid; gap: 16px; }
   .search { flex: 1 1 100%; order: 3; }
   .hide-sm { display: none; }
   .prefs section { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .save-row { grid-template-columns: minmax(0, 1fr); }
+  .save-row > * { grid-column: 1; }
 }
 @media (max-width: 479px) { .hide-xs { display: none; } }
 </style>
@@ -245,11 +250,13 @@ dialog form { display: grid; gap: 16px; }
           <label class="check-row"><input type="checkbox" id="allow-links" checked> Allow link sharing</label>
           </div>
         </section>
-        <div class="banner" id="save-error" role="alert" hidden>
-          <span>Couldn't save changes</span>
-          <button type="button" class="btn small" id="save-retry">Try again</button>
+        <div class="save-row">
+          <div class="banner" id="save-error" role="alert" hidden>
+            <span>Couldn't save changes</span>
+            <button type="button" class="btn small" id="save-retry">Try again</button>
+          </div>
+          <div><button type="submit" class="btn primary" id="save-prefs">Save changes</button></div>
         </div>
-        <div><button type="submit" class="btn primary" id="save-prefs">Save changes</button></div>
         <section aria-labelledby="h-storage">
           <h2 id="h-storage">Storage</h2>
           <div class="controls">
