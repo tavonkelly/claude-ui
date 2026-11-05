@@ -42,7 +42,7 @@ HINTS = {
     "accent-stripe": "Remove the colored edge stripe. Show status with text or an icon.",
     "repeated-cta": "Show the call to action once.",
     "small-target": "Make the target at least 24px, or leave 24px clear around it.",
-    "long-lines": "Cap the text width near 70 characters, such as max-width: 70ch.",
+    "long-lines": "Cap the text width near 70 characters, such as max-width: 60ch.",
 }
 BLOCK_RULES = {"nested-card", "single-control-card", "multiple-primary", "off-scale-spacing",
                "heading-skip", "overflow-x", "text-overlap", "hidden-visible"}

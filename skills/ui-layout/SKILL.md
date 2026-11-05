@@ -70,7 +70,7 @@ Edits that keep an existing screen's structure don't need a plan.
 
 - Take every margin, padding and gap from one scale: 4, 8, 12, 16, 24, 32, 48 or 64px. If the project defines its own spacing tokens, use those. 0, 1 and 2px are fine for hairlines.
 - Align content to one left edge. Center only short empty states and dialogs.
-- Keep running text near 70 characters wide (`max-width: 70ch`).
+- Keep running text near 70 characters wide. That's about `max-width: 60ch`, since a `ch` is the width of a zero and most letters are narrower.
 - Forms use one column, labels above fields, and fields as wide as their expected input.
 - Click targets are at least 24 by 24px (WCAG 2.5.8), and 44px on touch screens.
 - Use one density per page.

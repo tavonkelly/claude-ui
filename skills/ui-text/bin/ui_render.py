@@ -45,6 +45,17 @@ MEASURE = r"""
   const contrast = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
   const bgOf = e => { for (let x = e; x; x = x.parentElement) { const c = rgba(cs(x).backgroundColor); if (c[3] > 0.5) return c; } return [255, 255, 255, 1]; };
   const fixed = e => { for (let x = e; x && x !== document.body; x = x.parentElement) { const p = cs(x).position; if (p === 'fixed' || p === 'sticky') return true; } return false; };
+  // text nobody can see: inside a closed <details>, or clipped to nothing (screen-reader-only text, honeypot fields)
+  const hiddenText = el => {
+    const d = el.closest('details:not([open])');
+    if (d && !el.closest('summary')) return true;
+    for (let x = el; x && x !== document.body; x = x.parentElement) {
+      const st = cs(x), r = x.getBoundingClientRect();
+      if (st.clip !== 'auto' || st.clipPath !== 'none' || r.width <= 1 || r.height <= 1) return true;
+      if (st.overflow !== 'visible' && (r.width < 4 || r.height < 4)) return true;
+    }
+    return false;
+  };
   const all = [...document.body.querySelectorAll('*')].filter(e => !e.closest('svg') || e.tagName.toLowerCase() === 'svg');
   const NOTCARD = new Set('input select textarea button table thead tbody tfoot tr td th pre code img picture video audio svg dialog hr label option iframe canvas summary html body ul ol li nav header footer main form fieldset blockquote'.split(' '));
   const NOTSEG = /(^|[-_])(alert|banner|toast|notice|notification|callout|badge|chip|pill|tag|kbd|avatar|tooltip|btn|button|menu|dropdown|popover|modal|dialog|overlay|backdrop|skeleton)($|[-_])/i;
@@ -75,9 +86,7 @@ MEASURE = r"""
     for (let n = walker.nextNode(); n && boxes.length < 1500; n = walker.nextNode()) {
       if (!n.nodeValue.trim()) continue;
       const el = n.parentElement;
-      if (!el || ['SCRIPT', 'STYLE', 'NOSCRIPT', 'OPTION', 'TITLE'].includes(el.tagName) || !shown(el) || fixed(el)) continue;
-      const st = cs(el);
-      if (st.clip !== 'auto' || st.clipPath !== 'none') continue;
+      if (!el || ['SCRIPT', 'STYLE', 'NOSCRIPT', 'OPTION', 'TITLE'].includes(el.tagName) || !shown(el) || fixed(el) || hiddenText(el)) continue;
       const rg = document.createRange(); rg.selectNodeContents(n);
       for (const r of rg.getClientRects()) if (r.width > 2 && r.height > 2) boxes.push({r, el});
     }
@@ -171,7 +180,7 @@ MEASURE = r"""
   }
 
   if (checks.includes('targets')) {
-    const ts = [...document.querySelectorAll(CONTROL)].filter(shown);
+    const ts = [...document.querySelectorAll(CONTROL)].filter(e => shown(e) && !hiddenText(e));
     const rects = ts.map(e => {
       let x = e;
       if (e.matches('input[type=checkbox],input[type=radio]') && e.closest('label')) x = e.closest('label');
