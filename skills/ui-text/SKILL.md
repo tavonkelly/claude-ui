@@ -137,7 +137,7 @@ A project's own content guide, design system wording or term list wins over this
 
 ## Checker
 
-`bin/ui-text` in this skill's folder is a Python 3 script with no dependencies. It reads HTML, JSX/TSX, Svelte, Vue, Dart and Swift. It flags:
+`bin/ui-standards` in this skill's folder is a Python 3 script with no dependencies. It reads HTML, JSX/TSX, Svelte, Vue, Dart and Swift. It also runs the layout rules from the ui-layout skill. Its text rules flag:
 
 | Rule | Flags |
 |---|---|
@@ -150,20 +150,21 @@ A project's own content guide, design system wording or term list wins over this
 
 When hooks are installed (Claude Code and Codex) or the plugin is (opencode):
 
-- **Before the first UI edit in a session**, the edit is refused until this skill is loaded. Load it and send the edit again.
+- **Before the first UI edit in a session**, the edit is refused until this skill and the ui-layout skill are loaded. Load them and send the edit again.
 - **After each edit of a UI file**, it checks only the strings you added or changed and reports each flag with an id.
 - **At the end of the turn** (Claude Code and Codex), open flags block the stop once. Fix them, or waive the ones that are prose on purpose. If any stay open, list them for the user in your closing message.
 
 Commands, run from this skill's folder or by the full path the hook messages show:
 
-- `bin/ui-text check PATH... [--ignore-rule RULE] [--only GLOB]` checks whole files or folders.
-- `bin/ui-text flags` lists open flags in the current session.
-- `bin/ui-text waive ID [ID...] --reason "help panel"` waives flags for this session. Waivers are kept outside the repo. List every waiver in your closing message.
-- `bin/ui-text selftest` runs the cases in `tests/`.
+- `bin/ui-standards check PATH... [--ignore-rule RULE] [--only GLOB]` checks whole files or folders.
+- `bin/ui-standards flags` lists open flags in the current session.
+- `bin/ui-standards waive ID [ID...] --reason "help panel"` waives flags for this session. Waivers are kept outside the repo. List every waiver in your closing message.
+- `bin/ui-standards render FILE|URL` renders a page and checks its layout. See the ui-layout skill.
+- `bin/ui-standards selftest` runs the cases in `tests/`.
 
 Patterns can't judge meaning, so short narration gets past the checker. The rules above still apply to it.
 
-Without hooks, run `bin/ui-text check` on the files you changed before you finish.
+Without hooks, run `bin/ui-standards check` on the files you changed before you finish.
 
 ## Sources
 

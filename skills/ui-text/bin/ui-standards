@@ -1,0 +1,1182 @@
+#!/usr/bin/env python3
+"""ui-standards: checks UI text and layout in HTML, Vue, Svelte, JSX/TSX, CSS, Dart and Swift.
+
+Text rules flag expository copy. Layout rules flag nested cards, extra primary actions, spacing off
+the scale and the like (ui_layout.py). The render command measures a page in headless Chrome (ui_render.py).
+
+Commands:
+  check PATH... [--ignore-rule RULE] [--only GLOB] [--json]
+  render FILE|URL [--out DIR] [--wait MS] [--session ID]
+  flags [--session ID]
+  waive ID [ID...] --reason TEXT
+  selftest
+  hook session|pre|post|stop   (reads Claude Code or Codex hook JSON on stdin;
+                               the opencode plugin sends the same shape)
+"""
+import argparse
+import bisect
+import fnmatch
+import glob
+import hashlib
+import html
+import json
+import os
+import re
+import sys
+import time
+from collections import Counter
+from html.parser import HTMLParser
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+SKILL_DIR = os.path.dirname(HERE)
+SELF = os.path.realpath(__file__)
+STATE_DIR = os.path.expanduser(os.environ.get("UI_STANDARDS_STATE") or os.environ.get("UI_TEXT_STATE")
+                               or "~/.cache/ui-standards")
+SKILLS_DIR = os.path.dirname(SKILL_DIR)
+LAYOUT_DIR = os.path.join(SKILLS_DIR, "ui-layout")
+sys.path.insert(0, HERE)
+import ui_layout  # noqa: E402
+ui_layout.STATE_DIR = STATE_DIR
+
+EXTS = {".html": "html", ".htm": "html", ".vue": "html", ".svelte": "html",
+        ".jsx": "jsx", ".tsx": "jsx", ".dart": "dart", ".swift": "swift",
+        ".css": "css", ".scss": "css", ".less": "css", ".pcss": "css"}
+WALK_SKIP = {"node_modules", ".git", "dist", "build", ".venv", "venv", "Pods",
+             ".dart_tool", "DerivedData", ".next", ".svelte-kit", ".build"}
+
+LABEL_MAX = 4
+QUESTION_MAX = 8  # a heading or label phrased as a question
+TEXT_MAX = 12
+PHRASES = ["you can", "lets you", "allows you", "this page", "this screen", "so that",
+           "how it works", "under the hood", "please", "sorry", "thank you",
+           "thanks for", "click here", "simply", "oops"]
+GENERIC_BUTTONS = {"ok", "okay", "submit", "yes", "no"}
+INSTRUCTION_START = re.compile(r"^(enter|type|select|choose|pick)\b", re.I)
+HINTS = {
+    "long-label": "Cut to the name or the action, 1 to 4 words. A question heading may use up to 8.",
+    "long-text": "Keep only what the user needs to act. Explanations go to help.",
+    "multi-sentence": "Keep one idea. Cut the rest or move it to help.",
+    "phrase": "Remove it. It explains or pads the UI.",
+    "generic-button": "Name the action: verb plus object.",
+    "instruction-label": "Name the field, not the instruction: \"Email:\", not \"Enter email\".",
+}
+TEXT_RULES = list(HINTS)
+HINTS.update(ui_layout.HINTS)
+RULES = list(HINTS)
+STOPWORDS = {"the", "a", "an", "to", "of", "and", "is", "it", "you", "your", "for", "in",
+             "on", "with", "this", "that", "from", "are", "be", "or", "as", "at", "by",
+             "we", "our", "can", "will", "has", "have", "was", "not", "there", "here"}
+
+
+class Item(object):
+    __slots__ = ("text", "kind", "line", "ctx")
+
+    def __init__(self, text, kind, line, ctx=""):
+        self.text, self.kind, self.line, self.ctx = text, kind, line, ctx
+
+
+# ---------- normalizing and filters ----------
+
+def norm(s):
+    s = s.replace("\\n", " ").replace("\\t", " ")
+    s = re.sub(r"\\(['\"`\\$])", r"\1", s)
+    s = html.unescape(s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+WORD = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9'\u2019\-.]*[A-Za-z0-9])?")
+PH = "\u00a4"  # stands in for an interpolated value; never counted as a word
+CODE_CHARS = re.compile(r"[{}\[\];=<>\\|^~]|=>|::|\(\)|://|&&|\|\||\bfunction\b|\breturn\b|^\s*[./#@]")
+PLAIN_WORD = re.compile(r"^[(\"']?[A-Za-z][A-Za-z'\u2019\-]*[.,:;!?)\"'\u2026]*$")
+
+
+def prose_like(raw):
+    """For string literals in code with no known UI context."""
+    if raw.count("\n") >= 2:
+        return False
+    s = norm(raw)
+    if not s or CODE_CHARS.search(s):
+        return False
+    words = s.split()
+    if len(words) < 2:
+        return False
+    plain = sum(1 for w in words if PLAIN_WORD.match(w)) / float(len(words))
+    if s[0].isupper() or s[0].isdigit():
+        return plain >= 0.5
+    if len(words) < 5 or plain < 0.7:
+        return False
+    return any(w.lower().strip(".,:;!?") in STOPWORDS for w in words)
+
+
+def has_letters(s):
+    return bool(re.search(r"[A-Za-z]", s))
+
+
+# ---------- rules ----------
+
+def check_item(it, ignore=()):
+    t = norm(it.text)
+    if not has_letters(t):
+        return []
+    out = []
+    wc = len(WORD.findall(t))
+    limit = QUESTION_MAX if it.kind == "label" and t.endswith("?") else LABEL_MAX
+    if it.kind in ("label", "button") and wc > limit:
+        out.append(("long-label", ""))
+    if it.kind in ("text", "code") and wc > TEXT_MAX:
+        out.append(("long-text", ""))
+    parts = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9\"'])", t)
+    if sum(1 for p in parts if len(WORD.findall(p)) >= 5) >= 2:
+        out.append(("multi-sentence", ""))
+    low = " " + t.lower().replace("\u2019", "'") + " "
+    hits = [p for p in PHRASES if re.search(r"(?<![a-z])" + re.escape(p) + r"(?![a-z])", low)]
+    if hits:
+        out.append(("phrase", ", ".join('"%s"' % h for h in hits)))
+    if it.kind == "button" and t.strip(" .!").lower() in GENERIC_BUTTONS:
+        out.append(("generic-button", ""))
+    if it.kind == "label" and INSTRUCTION_START.match(t):
+        out.append(("instruction-label", ""))
+    return [(r, d) for r, d in out if r not in ignore]
+
+
+# ---------- C-like scanner (strings and comments) ----------
+# (ui_layout uses scan_literals too; it is handed over after the definition below.)
+
+def scan_literals(src, lang):
+    """Return (literals, comment_spans). literals: (start, end, text, quote)."""
+    lits, comments = [], []
+    i, n = 0, len(src)
+    while i < n:
+        c = src[i]
+        if c == "/" and i + 1 < n and src[i + 1] == "/":
+            j = src.find("\n", i)
+            j = n if j < 0 else j
+            comments.append((i, j))
+            i = j
+            continue
+        if c == "/" and i + 1 < n and src[i + 1] == "*":
+            j = src.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            comments.append((i, j))
+            i = j
+            continue
+        if lang in ("swift", "dart") and (src.startswith('"""', i) or src.startswith("'''", i)):
+            q = src[i:i + 3]
+            j = src.find(q, i + 3)
+            if j < 0:
+                break
+            lits.append((i, j + 3, src[i + 3:j], q))
+            i = j + 3
+            continue
+        if c in "\"'" or (c == "`" and lang == "js"):
+            j, buf = i + 1, []
+            while j < n:
+                d = src[j]
+                if d == "\\":
+                    buf.append(src[j:j + 2])
+                    j += 2
+                    continue
+                if d == c:
+                    break
+                if c != "`" and d == "\n":
+                    break
+                if c == "`" and src.startswith("${", j):
+                    depth, k = 0, j + 1
+                    while k < n:
+                        if src[k] == "{":
+                            depth += 1
+                        elif src[k] == "}":
+                            depth -= 1
+                            if depth == 0:
+                                break
+                        k += 1
+                    inner_lits, _ = scan_literals(src[j + 2:k], lang)
+                    lits.extend((a + j + 2, b + j + 2, t, qq) for a, b, t, qq in inner_lits)
+                    buf.append(PH)
+                    j = k + 1
+                    continue
+                buf.append(d)
+                j += 1
+            lits.append((i, j + 1, "".join(buf), c))
+            i = j + 1
+            continue
+        i += 1
+    return lits, comments
+
+
+ui_layout.scan_literals = scan_literals
+
+
+def mask(src, spans):
+    out, last = [], 0
+    for a, b in spans:
+        out.append(src[last:a])
+        out.append(re.sub(r"[^\n]", " ", src[a:b]))
+        last = b
+    out.append(src[last:])
+    return "".join(out)
+
+
+class Lines(object):
+    def __init__(self, src):
+        self.nl = [m.start() for m in re.finditer("\n", src)]
+
+    def at(self, idx):
+        return bisect.bisect_right(self.nl, idx - 1) + 1
+
+
+# ---------- context for literals in code ----------
+
+SKIP_CTX = re.compile(
+    r"(console\.\w+|logger\.\w+|log\.\w+|\bprint|debugPrint|NSLog|os_log|\bassert\w*|\bdescribe|\bit|\btest|"
+    r"\bexpect|\brequire|\bimport|querySelector(?:All)?|getElementById|closest|matches|addEventListener|"
+    r"removeEventListener|classList\.\w+|setAttribute|getAttribute|removeAttribute|localStorage\.\w+|"
+    r"sessionStorage\.\w+|JSON\.parse|\bfetch|new URL|createElement|\bError|\bEvent|\bkey|\bRegExp|"
+    r"\bfrom|\bswitch|\bcase|\btypeof|\binstanceof|dataset\.\w+|\bemit|\bon|\buse\w*)\s*\(?\s*$")
+JS_LABEL_CTX = re.compile(r"(?:\b(?:ariaLabel|aria-label|label|title|tooltip)\s*[:=]\s*|\.(?:title|ariaLabel)\s*=\s*)$")
+JS_TEXT_CTX = re.compile(r"(?:\b(?:textContent|innerText|placeholder|alt|message|description|hint|helperText|subtitle|"
+                         r"emptyText|errorText)\s*[:=]\s*|\b(?:toast|notify|showToast|setError|setMessage|"
+                         r"setStatus|alert|confirm)\s*\(\s*)$")
+DART_LABEL_CTX = re.compile(r"\b(?:labelText|label|tooltip|title|semanticLabel|semanticsLabel)\s*:\s*(?:const\s+)?(?:Text\(\s*)?$")
+DART_TEXT_CTX = re.compile(r"(?:\b(?:hintText|helperText|errorText|counterText|message|content|subtitle)\s*:\s*(?:const\s+)?(?:Text\(\s*)?|"
+                           r"\b(?:Text|SelectableText|Tooltip)\(\s*(?:message:\s*)?)$")
+DART_BUTTON_CTX = re.compile(r"Button\w*(?:\.\w+)?\([^()]*\bchild:\s*(?:const\s+)?Text\(\s*$", re.S)
+SWIFT_BUTTON_CTX = re.compile(r"\bButton\(\s*$")
+SWIFT_LABEL_CTX = re.compile(r"(?:\b(?:Label|Toggle|Section|TextField|SecureField|Picker|Menu|Tab|NavigationLink|Link|"
+                             r"DisclosureGroup|Stepper)\(\s*|\.(?:navigationTitle|navigationBarTitle|accessibilityLabel|"
+                             r"alert|confirmationDialog|tabItem)\(\s*)$")
+SWIFT_TEXT_CTX = re.compile(r"(?:\bText\(\s*(?:verbatim:\s*)?|\.(?:help|accessibilityHint)\(\s*|NSLocalizedString\(\s*|"
+                            r"String\(localized:\s*|LocalizedStringKey\(\s*|\bmessage:\s*)$")
+
+
+def literal_kind(src, start, end, lang):
+    tail = src[max(0, start - 120):start]
+    after = src[end:end + 3]
+    if re.match(r"\s*:", after) and lang in ("js", "dart"):
+        return None  # object or map key
+    if SKIP_CTX.search(tail):
+        return None
+    if lang == "dart":
+        if DART_BUTTON_CTX.search(src[max(0, start - 300):start]):
+            return "button"
+        if DART_LABEL_CTX.search(tail):
+            return "label"
+        if DART_TEXT_CTX.search(tail):
+            return "text"
+    elif lang == "swift":
+        if SWIFT_BUTTON_CTX.search(tail):
+            return "button"
+        if SWIFT_LABEL_CTX.search(tail):
+            return "label"
+        if SWIFT_TEXT_CTX.search(tail):
+            return "text"
+    else:
+        if JS_LABEL_CTX.search(tail):
+            return "label"
+        if JS_TEXT_CTX.search(tail):
+            return "text"
+    return "code"
+
+
+def interp(text, lang):
+    if lang == "dart":
+        return re.sub(r"\$\{[^}]*\}|\$\w+", PH, text)
+    if lang == "swift":
+        return re.sub(r"\\\([^)]*\)", PH, text)
+    return text
+
+
+def extract_code(src, lang, line_offset=0):
+    items = []
+    lines = Lines(src)
+    lits, comments = scan_literals(src, lang)
+    for start, end, raw, q in lits:
+        text = interp(raw, lang)
+        if not has_letters(text):
+            continue
+        line = lines.at(start) + line_offset
+        if q == "`" and re.search(r"<[A-Za-z/][^>]*>", text):
+            items.extend(extract_html(text, line - 1, embedded=True))
+            continue
+        kind = literal_kind(src, start, end, lang)
+        if kind is None:
+            continue
+        if kind == "code" and not prose_like(text):
+            continue
+        if kind != "code" and CODE_CHARS.search(norm(text)) and "<" in text:
+            continue
+        items.append(Item(text, kind, line, "string"))
+    return items, comments
+
+
+# ---------- HTML, Vue, Svelte ----------
+
+INLINE = {"a", "abbr", "b", "bdi", "bdo", "br", "cite", "data", "dfn", "em", "i", "kbd", "mark",
+          "q", "s", "small", "span", "strong", "sub", "sup", "time", "u", "var", "wbr", "img", "svg",
+          "code", "samp"}
+VOID = {"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source",
+        "track", "wbr"}
+SKIP_TEXT = {"pre", "code", "kbd", "samp", "textarea"}
+
+
+def tag_kind(tag, role=""):
+    if not tag:
+        return "text"
+    t = tag.lower()
+    role = (role or "").lower()
+    if "button" in t or role == "button":
+        return "button"
+    if re.fullmatch(r"h[1-6]", t) or t in ("label", "th", "legend", "summary", "option", "caption", "dt", "title"):
+        return "label"
+    if role in ("tab", "menuitem", "option", "heading", "columnheader"):
+        return "label"
+    if t != "title" and any(k in t for k in ("label", "heading", "title", "tab", "menuitem")) and t not in ("table", "tbody", "thead", "tabs", "tablist"):
+        return "label"
+    return "text"
+
+
+class _HP(HTMLParser):
+    def __init__(self, line_offset):
+        HTMLParser.__init__(self, convert_charrefs=True)
+        self.off = line_offset
+        self.stack = []
+        self.items = []
+        self.scripts = []
+        self.buf, self.buf_line, self.buf_kind = [], 0, "text"
+
+    def _line(self):
+        return self.getpos()[0] + self.off
+
+    def _flush(self):
+        text = "".join(self.buf)
+        if has_letters(text) and text.strip():
+            self.items.append(Item(text, self.buf_kind, self.buf_line, "text"))
+        self.buf = []
+
+    def _kind_now(self):
+        kind = "text"
+        for tag, role in reversed(self.stack):
+            k = tag_kind(tag, role)
+            if k == "button":
+                return "button"
+            if k == "label" and kind == "text":
+                kind = "label"
+        return kind
+
+    def _skipping(self):
+        return any(t in SKIP_TEXT for t, _ in self.stack)
+
+    def handle_starttag(self, tag, attrs):
+        a = dict((k, v or "") for k, v in attrs)
+        line = self._line()
+        role = a.get("role", "")
+        for k in ("aria-label", "title", "alt", "placeholder", "label"):
+            v = a.get(k)
+            if v and has_letters(v) and "{" not in v:
+                if k in ("aria-label", "label") or (k == "title" and tag in ("button", "a")):
+                    kind = "button" if tag_kind(tag, role) == "button" else "label"
+                else:
+                    kind = "text"
+                self.items.append(Item(v, kind, line, "%s[%s]" % (tag, k)))
+        if tag == "input" and a.get("type", "").lower() in ("submit", "button", "reset") and a.get("value"):
+            self.items.append(Item(a["value"], "button", line, "input[value]"))
+        if tag not in INLINE:
+            self._flush()
+        if tag in VOID:
+            return
+        self.stack.append((tag, role))
+
+    def handle_startendtag(self, tag, attrs):
+        self.handle_starttag(tag, attrs)
+        if tag not in VOID and self.stack and self.stack[-1][0] == tag:
+            self.stack.pop()
+
+    def handle_endtag(self, tag):
+        if tag not in INLINE:
+            self._flush()
+        for i in range(len(self.stack) - 1, -1, -1):
+            if self.stack[i][0] == tag:
+                del self.stack[i:]
+                break
+
+    def handle_data(self, data):
+        top = self.stack[-1][0] if self.stack else ""
+        if top == "script":
+            self.scripts.append((self._line() - 1, data))
+            return
+        if top == "style" or self._skipping():
+            return
+        if not self.buf:
+            self.buf_line = self._line()
+            self.buf_kind = self._kind_now()
+        self.buf.append(data)
+
+    def close(self):
+        HTMLParser.close(self)
+        self._flush()
+
+
+def _blank_expr(src):
+    """Replace {{ }} and { } template expressions outside script/style with X, keeping newlines."""
+    parts = re.split(r"(<script\b.*?</script>|<style\b.*?</style>)", src, flags=re.S | re.I)
+    keep = lambda m: PH + "\n" * m.group(0).count("\n")
+    for i in range(0, len(parts), 2):
+        parts[i] = re.sub(r"\{\{.*?\}\}", keep, parts[i], flags=re.S)
+        parts[i] = re.sub(r"\{[^{}]*\}", keep, parts[i])
+    return "".join(parts)
+
+
+def extract_html(src, line_offset=0, embedded=False):
+    p = _HP(line_offset)
+    try:
+        p.feed(src if embedded else _blank_expr(src))
+        p.close()
+    except Exception:
+        pass
+    items = p.items
+    for off, code in p.scripts:
+        its, _ = extract_code(code, "js", off)
+        items.extend(its)
+    return items
+
+
+# ---------- JSX / TSX ----------
+
+JSX_ATTR = re.compile(r"\b(title|placeholder|aria-label|alt|label|tooltip|helperText|description)="
+                      r"(?:\"([^\"]*)\"|'([^']*)'|\{\s*[\"'`]([^\"'`]*)[\"'`]\s*\})")
+
+
+def extract_jsx(src):
+    code_items, comments = extract_code(src, "js")
+    m_src = mask(src, comments)
+    lines = Lines(src)
+    items = []
+    for m in re.finditer(r">([^<>{}]*[A-Za-z][^<>{}]*)<", m_src):
+        text = m.group(1)
+        before = m_src[max(0, m.start() - 400):m.start() + 1]
+        tm = re.search(r"<([A-Za-z][\w.]*)(?:\s[^<>]*)?>$", before)
+        if tm:
+            tag = tm.group(1)
+        elif re.search(r"(</[\w.]*>|/>)$", before):
+            tag = None
+        else:
+            continue
+        if CODE_CHARS.search(norm(text)) or re.search(r"[()]\s*=>|&&", text):
+            continue
+        lead = len(text) - len(text.lstrip())
+        items.append(Item(text, tag_kind(tag), lines.at(m.start(1) + lead), "jsx-text"))
+    for m in JSX_ATTR.finditer(m_src):
+        name = m.group(1)
+        val = m.group(2) or m.group(3) or m.group(4) or ""
+        if not has_letters(val):
+            continue
+        tagm = re.search(r"<([A-Za-z][\w.]*)[^<>]*$", m_src[max(0, m.start() - 300):m.start()])
+        tag = tagm.group(1) if tagm else ""
+        if name in ("aria-label", "label", "title", "tooltip"):
+            kind = "button" if tag_kind(tag) == "button" else "label"
+        else:
+            kind = "text"
+        items.append(Item(val, kind, lines.at(m.start()), "jsx[%s]" % name))
+    seen = set((norm(i.text), i.line) for i in items)
+    for it in code_items:
+        if (norm(it.text), it.line) not in seen:
+            items.append(it)
+    return items
+
+
+# ---------- dispatch ----------
+
+def lang_of(path):
+    return EXTS.get(os.path.splitext(path)[1].lower())
+
+
+def extract(src, path):
+    lang = lang_of(path)
+    if lang == "css":
+        return []
+    if lang == "html":
+        return extract_html(src)
+    if lang == "jsx":
+        return extract_jsx(src)
+    if lang in ("dart", "swift"):
+        return extract_code(src, lang)[0]
+    return []
+
+
+def key(it):
+    return (norm(it.text), it.kind)
+
+
+def changed_items(old_src, new_src, path):
+    old = Counter(key(i) for i in extract(old_src, path)) if old_src else Counter()
+    out = []
+    for it in extract(new_src, path):
+        k = key(it)
+        if old[k] > 0:
+            old[k] -= 1
+        else:
+            out.append(it)
+    return out
+
+
+def flag_id(session, path, text, rule):
+    h = hashlib.sha1(("%s|%s|%s|%s" % (session, path, text, rule)).encode("utf-8")).hexdigest()
+    return "U" + h[:6]
+
+
+def excerpt(t, n=90):
+    t = norm(t)
+    return t if len(t) <= n else t[:n - 1] + "\u2026"
+
+
+def flags_for(items, path, session="", ignore=()):
+    out, seen = [], set()
+    for it in items:
+        for rule, detail in check_item(it, ignore):
+            fid = flag_id(session, path, norm(it.text), rule)
+            if fid in seen:
+                continue
+            seen.add(fid)
+            out.append({"id": flag_id(session, path, norm(it.text), rule), "file": path,
+                        "line": it.line, "rule": rule, "detail": detail,
+                        "text": norm(it.text), "status": "open"})
+    return out
+
+
+def layout_flags_for(found, path, session="", ignore=(), prefix="L"):
+    out, seen = [], set()
+    for x in found:
+        if x["rule"] in ignore:
+            continue
+        h = hashlib.sha1(("%s|%s|%s" % (session, path, x["key"])).encode("utf-8")).hexdigest()
+        fid = prefix + h[:6]
+        if fid in seen:
+            continue
+        seen.add(fid)
+        out.append({"id": fid, "kind": "render" if prefix == "R" else "layout", "file": path, "line": x["line"],
+                    "rule": x["rule"], "tier": x["tier"], "key": x["key"], "detail": "", "text": x["text"],
+                    "status": "open" if x["tier"] == ui_layout.BLOCK else "advice"})
+    return out
+
+
+def changed_layout(old_src, new_src, path):
+    old = Counter(x["key"] for x in ui_layout.findings(old_src, path)) if old_src else Counter()
+    out = []
+    for x in ui_layout.findings(new_src, path):
+        if old[x["key"]] > 0:
+            old[x["key"]] -= 1
+        else:
+            out.append(x)
+    return out
+
+
+def fmt(f, rel=None):
+    p = f["file"]
+    if rel and not re.match(r"^[a-z]+://", p):
+        try:
+            r = os.path.relpath(p, rel)
+            if not r.startswith(".."):
+                p = r
+        except ValueError:
+            pass
+    if f.get("kind") == "render":
+        return '%s %s at %spx [%s] %s\n    %s' % (f["id"], p, f.get("width", "?"), f["rule"], excerpt(f["text"], 160), HINTS[f["rule"]])
+    if f.get("kind") == "layout":
+        return '%s %s:%s [%s] %s\n    %s' % (f["id"], p, f["line"], f["rule"], excerpt(f["text"], 160), HINTS[f["rule"]])
+    extra = " (%s)" % f["detail"] if f.get("detail") else ""
+    return '%s %s:%s [%s%s] "%s"\n    %s' % (f["id"], p, f["line"], f["rule"], extra,
+                                           excerpt(f["text"]), HINTS[f["rule"]])
+
+
+# ---------- session state ----------
+
+def state_path(session):
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", session or "nosession")
+    return os.path.join(STATE_DIR, safe + ".json")
+
+
+def load_state(session):
+    try:
+        with open(state_path(session)) as fh:
+            return json.load(fh)
+    except Exception:
+        return {"session": session, "gate_done": False, "flags": {}}
+
+
+def save_state(st):
+    os.makedirs(STATE_DIR, exist_ok=True)
+    p = state_path(st.get("session", ""))
+    tmp = p + ".tmp"
+    with open(tmp, "w") as fh:
+        json.dump(st, fh, indent=1)
+    os.replace(tmp, p)
+
+
+def read(path):
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            return fh.read()
+    except Exception:
+        return None
+
+
+SKILL_LOADED = re.compile(r'"skill":\s*"(?:[\w.-]+:)?(ui-text|ui-layout)"|Base directory for this skill: [^"\\\n]*/(ui-text|ui-layout)\b'
+                          r'|skills/(ui-text|ui-layout)/SKILL\.md')
+
+CORE_RULE = ("UI text: text on a screen is not prose. Name the thing or the action in a few words, "
+             "show state as state, and keep explanations of how the system works off the screen. "
+             "Before writing or changing any text a product's user sees, load the ui-text skill.\n"
+             "UI layout: a screen has one job and one primary action. Put what users need first, group with "
+             "space before boxes, don't nest cards, and keep internals in a developer view. Before building "
+             "or rearranging a screen, load the ui-layout skill.")
+
+
+def needed_skills():
+    return {"ui-text", "ui-layout"} if os.path.isfile(os.path.join(LAYOUT_DIR, "SKILL.md")) else {"ui-text"}
+
+
+def skill_loaded(transcript):
+    if not transcript:
+        return False
+    found, need = set(), needed_skills()
+    try:
+        with open(transcript, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                if "ui-" in line:
+                    for m in SKILL_LOADED.finditer(line):
+                        found.add(next(g for g in m.groups() if g))
+                    if need <= found:
+                        return True
+    except Exception:
+        return False
+    return need <= found
+
+
+# ---------- what a tool call writes ----------
+
+# Claude Code: Edit, Write. opencode: edit, write, multiedit. Codex and some
+# opencode models send apply_patch text instead, found anywhere in the input.
+EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "edit", "write", "multiedit"}
+PATCH_FILE = re.compile(r"^\*\*\* (Add|Update|Delete) File: (.+?)\s*$")
+PATCH_MOVE = re.compile(r"^\*\*\* Move to: (.+?)\s*$")
+
+
+def find_patch(obj, depth=0):
+    if depth > 6:
+        return None
+    if isinstance(obj, str):
+        i = obj.find("*** Begin Patch")
+        if i < 0:
+            return None
+        j = obj.find("*** End Patch", i)
+        return obj[i:] if j < 0 else obj[i:j + len("*** End Patch")]
+    vals = obj.values() if isinstance(obj, dict) else obj if isinstance(obj, list) else ()
+    for v in vals:
+        p = find_patch(v, depth + 1)
+        if p:
+            return p
+    return None
+
+
+def parse_patch(text):
+    """Files in apply_patch text, each with its hunks as (old, new) text pairs."""
+    files, cur, old, new = [], [None], [], []
+
+    def flush():
+        if cur[0] is not None and (old or new):
+            cur[0]["hunks"].append(("\n".join(old), "\n".join(new)))
+        del old[:], new[:]
+
+    for line in text.splitlines():
+        m = PATCH_FILE.match(line)
+        if m:
+            flush()
+            cur[0] = {"op": m.group(1), "path": m.group(2), "dest": None, "hunks": []}
+            files.append(cur[0])
+            continue
+        if cur[0] is None:
+            continue
+        m = PATCH_MOVE.match(line)
+        if m:
+            cur[0]["dest"] = m.group(1)
+        elif line.startswith("@@"):
+            flush()
+        elif line.startswith("***"):
+            continue
+        elif line.startswith("+"):
+            new.append(line[1:])
+        elif line.startswith("-"):
+            old.append(line[1:])
+        else:
+            ctx = line[1:] if line.startswith(" ") else line
+            old.append(ctx)
+            new.append(ctx)
+    flush()
+    return files
+
+
+def edit_targets(data):
+    ti = data.get("tool_input")
+    if not isinstance(ti, dict):
+        ti = {"input": ti}
+    cwd = data.get("cwd") or os.getcwd()
+
+    def absp(p):
+        return os.path.normpath(os.path.join(cwd, os.path.expanduser(p.strip())))
+
+    out = []
+    path = ti.get("file_path") or ti.get("filePath")
+    if data.get("tool_name") in EDIT_TOOLS and isinstance(path, str) and path.strip():
+        out.append({"path": absp(path), "dest": absp(path), "ti": ti})
+    else:
+        patch = find_patch(ti)
+        for f in parse_patch(patch) if patch else []:
+            if f["op"] != "Delete":
+                p = absp(f["path"])
+                out.append({"path": p, "dest": absp(f["dest"]) if f["dest"] else p,
+                            "hunks": f["hunks"], "add": f["op"] == "Add"})
+    return [t for t in out if lang_of(t["dest"]) or lang_of(t["path"])]
+
+
+def snap_path(session, call, path):
+    key = hashlib.sha1(("%s\0%s\0%s" % (session, call, path)).encode()).hexdigest()[:20]
+    return os.path.join(STATE_DIR, "snap", key + ".txt")
+
+
+def prune_snaps():
+    cutoff = time.time() - 86400
+    try:
+        for e in os.scandir(os.path.join(STATE_DIR, "snap")):
+            if e.stat().st_mtime < cutoff:
+                os.remove(e.path)
+    except OSError:
+        pass
+
+
+def before_after(t, data, session, new):
+    """(old, new) text to diff: the snapshot, else rebuilt from the edit, else the fragments."""
+    snap = snap_path(session, data.get("tool_use_id") or "", t["path"])
+    if os.path.isfile(snap):
+        old = read(snap) or ""
+        try:
+            os.remove(snap)
+        except OSError:
+            pass
+        return old, new
+    ti = t.get("ti") or {}
+    os_ = ti.get("old_string", ti.get("oldString"))
+    ns = ti.get("new_string", ti.get("newString"))
+    if isinstance(os_, str) and isinstance(ns, str):
+        if ns and ns in new:
+            if ti.get("replace_all") or ti.get("replaceAll"):
+                return new.replace(ns, os_), new
+            return new.replace(ns, os_, 1), new
+        return os_, ns
+    if t.get("add"):
+        return "", new
+    if t.get("hunks"):
+        old = new
+        for o, n in t["hunks"]:
+            if n and n in old:
+                old = old.replace(n, o, 1)
+        return old, new
+    return "", new
+
+
+# ---------- hooks ----------
+
+def hook_session(data):
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": CORE_RULE}}))
+    return 0
+
+
+def hook_pre(data):
+    targets = edit_targets(data)
+    if not targets:
+        return 0
+    session = data.get("session_id", "")
+    st = load_state(session)
+    if not st.get("gate_done"):
+        st["gate_done"] = True
+        save_state(st)
+        if not (data.get("skill_loaded") or skill_loaded(data.get("transcript_path"))):
+            print(json.dumps({"hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": (
+                    "ui-standards: load the %s before writing UI (in Claude Code, the Skill tool; "
+                    "elsewhere, read %s). Then send this edit again. This check runs once per session." % (
+                        " and ".join(sorted(needed_skills())) + (" skills" if len(needed_skills()) > 1 else " skill"),
+                        " and ".join(os.path.join(SKILLS_DIR, n, "SKILL.md") for n in sorted(needed_skills()))))}}))
+            return 0
+    os.makedirs(os.path.join(STATE_DIR, "snap"), exist_ok=True)
+    prune_snaps()
+    call = data.get("tool_use_id") or ""
+    for t in targets:
+        old = read(t["path"]) if os.path.isfile(t["path"]) else None
+        if old is not None and len(old) < 3000000:
+            with open(snap_path(session, call, t["path"]), "w", encoding="utf-8") as fh:
+                fh.write(old)
+    return 0
+
+
+def hook_post(data):
+    targets = edit_targets(data)
+    if not targets:
+        return 0
+    session = data.get("session_id", "")
+    found = []
+    for t in targets:
+        new = read(t["dest"])
+        if new is None:
+            continue
+        old, cur = before_after(t, data, session, new)
+        found.extend(flags_for(changed_items(old, cur, t["dest"]), t["dest"], session))
+        found.extend(layout_flags_for(changed_layout(old, cur, t["dest"]), t["dest"], session))
+    if not found:
+        return 0
+    st = load_state(session)
+    for f in found:
+        prev = st["flags"].get(f["id"])
+        if prev and prev.get("status") == "waived":
+            continue
+        st["flags"][f["id"]] = f
+    save_state(st)
+    problems = [f for f in found if st["flags"][f["id"]]["status"] == "open"]
+    advice = [f for f in found if st["flags"][f["id"]]["status"] == "advice"]
+    if not problems and not advice:
+        return 0
+    rel = data.get("cwd")
+    parts = []
+    if problems:
+        parts.append("ui-standards found %d problem(s) in your edit:\n" % len(problems) +
+                     "\n".join(fmt(f, rel) for f in problems) +
+                     "\nFix them now. If one is intended, run: %s waive <ID> --reason \"...\"" % SELF)
+    if advice:
+        parts.append("ui-standards advice on your edit (doesn't block):\n" + "\n".join(fmt(f, rel) for f in advice))
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": "\n".join(parts)}}))
+    return 0
+
+
+def still_present(f, cache):
+    if f.get("kind") == "render":
+        return True  # cleared only by a later render of the same page
+    path = f["file"]
+    if f.get("kind") == "layout":
+        k = ("layout", path)
+        if k not in cache:
+            src = read(path)
+            cache[k] = set(x["key"] for x in ui_layout.findings(src, path)) if src is not None else set()
+        return f["key"] in cache[k]
+    if path not in cache:
+        src = read(path)
+        cache[path] = set(norm(i.text) for i in extract(src, path)) if src is not None else set()
+    return f["text"] in cache[path]
+
+
+def hook_stop(data):
+    session = data.get("session_id", "")
+    if not os.path.isfile(state_path(session)):
+        return 0
+    st = load_state(session)
+    cache, open_flags = {}, []
+    for fid, f in list(st["flags"].items()):
+        if f.get("status") != "open":
+            continue
+        if still_present(f, cache):
+            open_flags.append(f)
+        else:
+            f["status"] = "fixed"
+    waived = [f for f in st["flags"].values() if f.get("status") == "waived" and not f.get("waiver_reported")]
+    if not open_flags:
+        for f in waived:
+            f["waiver_reported"] = True
+        save_state(st)
+        return 0
+    if data.get("stop_hook_active"):
+        for f in open_flags:
+            f["status"] = "reported"
+        for f in waived:
+            f["waiver_reported"] = True
+        save_state(st)
+        return 0
+    save_state(st)
+    reason = ("ui-standards: %d problem(s) are still open:\n" % len(open_flags) +
+              "\n".join(fmt(f, data.get("cwd")) for f in open_flags) +
+              "\nFix them, or waive the ones that are intended: %s waive <ID> --reason \"...\". "
+              "List any you leave open, and every waiver, in your closing message." % SELF)
+    if waived:
+        reason += "\nWaived this session: " + "; ".join('%s [%s] "%s" (%s)' % (f["id"], f["rule"], excerpt(f["text"], 50), f.get("reason", "")) for f in waived)
+    print(json.dumps({"decision": "block", "reason": reason}))
+    return 0
+
+
+# ---------- commands ----------
+
+def walk(paths, only):
+    for p in paths:
+        if os.path.isdir(p):
+            for root, dirs, files in os.walk(p):
+                dirs[:] = [d for d in dirs if d not in WALK_SKIP]
+                for name in sorted(files):
+                    fp = os.path.join(root, name)
+                    if lang_of(fp) and (not only or fnmatch.fnmatch(fp, only) or fnmatch.fnmatch(name, only)):
+                        yield fp
+        elif os.path.isfile(p) and lang_of(p) and (not only or fnmatch.fnmatch(p, only) or fnmatch.fnmatch(os.path.basename(p), only)):
+            yield p
+
+
+def cmd_check(args):
+    total, ctas = [], {}
+    ignore = set(args.ignore_rule or [])
+    session = session_for(None)
+    in_session = bool(session) and os.path.isfile(state_path(session))
+    sid = session if in_session else ""
+    for fp in walk(args.paths, args.only):
+        src = read(fp)
+        if src is None:
+            continue
+        ap = os.path.abspath(fp)
+        total.extend(flags_for(extract(src, fp), ap, sid, ignore))
+        total.extend(layout_flags_for(ui_layout.findings(src, fp), ap, sid, ignore))
+        for line, sig in ui_layout.cta_signatures(src, fp):
+            ctas.setdefault(sig, []).append((ap, line))
+    if "repeated-cta" not in ignore:
+        for sig, where in ctas.items():
+            files = sorted(set(p for p, _ in where))
+            if len(files) > 1:
+                for p, line in where:
+                    x = ui_layout.find("repeated-cta", line, "files|" + sig[:60],
+                                       'call to action "%s" repeats in %d files' % (sig.split("|")[0][:40], len(files)))
+                    total.extend(layout_flags_for([x], p, sid))
+    if in_session and total:
+        # Record what check found, so waive accepts these ids. Listed flags never block the stop.
+        st = load_state(session)
+        for f in total:
+            if f["id"] not in st["flags"]:
+                st["flags"][f["id"]] = dict(f, status="listed")
+        save_state(st)
+    problems = [f for f in total if f.get("status") != "advice"]
+    advice = [f for f in total if f.get("status") == "advice"]
+    if args.json:
+        print(json.dumps(total, indent=1))
+    else:
+        for f in problems:
+            print(fmt(f, os.getcwd()))
+        if advice:
+            print("Advice:")
+            for f in advice:
+                print(fmt(f, os.getcwd()))
+        counts = Counter(f["rule"] for f in total)
+        print("%d problem(s), %d advice%s" % (len(problems), len(advice),
+                                              (": " + ", ".join("%s %d" % kv for kv in counts.most_common())) if total else ""))
+    return 1 if problems else 0
+
+
+def session_for(arg):
+    if arg:
+        return arg
+    for k in ("CLAUDE_CODE_SESSION_ID", "UI_STANDARDS_SESSION"):
+        if os.environ.get(k):
+            return os.environ[k]
+    files = recent_states()
+    if files:
+        try:
+            with open(files[0]) as fh:
+                return json.load(fh).get("session", "")
+        except Exception:
+            pass
+    return ""
+
+
+def project_render_dir():
+    """.ui-standards/render in the current folder, so the agent can open the screenshots; git ignores it."""
+    base = os.path.join(os.getcwd(), ".ui-standards")
+    try:
+        os.makedirs(os.path.join(base, "render"), exist_ok=True)
+        gi = os.path.join(base, ".gitignore")
+        if not os.path.isfile(gi):
+            with open(gi, "w") as fh:
+                fh.write("*\n")
+        return os.path.join(base, "render")
+    except OSError:
+        return os.path.join(STATE_DIR, "render")
+
+
+def cmd_render(args):
+    import ui_render
+    target = args.target
+    if not re.match(r"^[a-z]+://", target):
+        if not os.path.isfile(target):
+            print("No file at %s. Pass a file path or a URL, such as http://localhost:5173/settings." % target, file=sys.stderr)
+            return 2
+        target = os.path.abspath(target)
+    out_dir = args.out or project_render_dir()
+    res = ui_render.render(target, out_dir, args.wait)
+    if res["error"] == "no-chrome":
+        print("Chrome or Chromium isn't installed, so nothing was rendered. "
+              "Set UI_STANDARDS_CHROME to the browser's path to enable rendering.")
+        return 0
+    if res["error"]:
+        print(res["error"], file=sys.stderr)
+        if not res["shots"] and not res["findings"]:
+            return 2
+    session = session_for(args.session)
+    found = []
+    for x in res["findings"]:
+        f = ui_layout.find(x["rule"], 0, "%s|%s" % (x.get("width"), x.get("where", "")), x["text"])
+        found.extend(layout_flags_for([f], target, session, prefix="R"))
+        found[-1]["width"] = x.get("width")
+    st = load_state(session)
+    keys = set(f["id"] for f in found)
+    for fid, f in st["flags"].items():
+        if f.get("kind") == "render" and f["file"] == target and fid not in keys and f.get("status") in ("open", "reported", "advice"):
+            f["status"] = "fixed"
+    for f in found:
+        prev = st["flags"].get(f["id"])
+        if prev and prev.get("status") == "waived":
+            f["status"] = "waived"
+            f["reason"] = prev.get("reason", "")
+        st["flags"][f["id"]] = f
+    save_state(st)
+    if res["shots"]:
+        print("Screenshots:")
+        for p in res["shots"]:
+            print("  " + p)
+        print("Look at each one. Does the eye land on the screen's main task first?")
+    problems = [f for f in found if f["status"] == "open"]
+    advice = [f for f in found if f["status"] == "advice"]
+    for f in problems:
+        print(fmt(f))
+    if advice:
+        print("Advice:")
+        for f in advice:
+            print(fmt(f))
+    print("%d problem(s), %d advice" % (len(problems), len(advice)))
+    if problems:
+        print("Fix them, or waive the ones that are intended: %s waive <ID> --reason \"...\"" % SELF)
+    return 1 if problems else 0
+
+
+def recent_states():
+    files = glob.glob(os.path.join(STATE_DIR, "*.json"))
+    return sorted(files, key=os.path.getmtime, reverse=True)
+
+
+def cmd_flags(args):
+    files = [state_path(args.session)] if args.session else recent_states()[:1]
+    if not files:
+        print("No ui-standards session state")
+        return 0
+    with open(files[0]) as fh:
+        st = json.load(fh)
+    rows = [f for f in st.get("flags", {}).values() if f.get("status") in ("open", "waived")]
+    for f in rows:
+        print(("[waived: %s] " % f.get("reason", "")) * (f["status"] == "waived") + fmt(f))
+    print("%d open, %d waived" % (sum(f["status"] == "open" for f in rows), sum(f["status"] == "waived" for f in rows)))
+    return 0
+
+
+def cmd_waive(args):
+    missing = 0
+    for fid in args.ids:
+        done = False
+        for p in recent_states():
+            try:
+                with open(p) as fh:
+                    st = json.load(fh)
+            except Exception:
+                continue
+            f = st.get("flags", {}).get(fid)
+            if f:
+                f["status"] = "waived"
+                f["reason"] = args.reason
+                f["waived_at"] = time.time()
+                save_state(st)
+                print('Waived %s [%s] "%s": %s' % (fid, f["rule"], excerpt(f["text"], 60), args.reason))
+                done = True
+                break
+        if not done:
+            missing += 1
+            print("No flag %s in recent sessions" % fid, file=sys.stderr)
+    if missing < len(args.ids):
+        print("List every waiver in your closing message.")
+    return 1 if missing else 0
+
+
+def cmd_selftest(args):
+    tdir = os.path.join(SKILL_DIR, "tests")
+    with open(os.path.join(tdir, "expected.json")) as fh:
+        expected = json.load(fh)
+    failures = 0
+    for name, want in sorted(expected.items()):
+        fp = os.path.join(tdir, name)
+        src = read(fp)
+        got = flags_for(extract(src, fp), fp) + layout_flags_for(ui_layout.findings(src, fp), fp)
+        if name.startswith("good") or "-good" in name:
+            if got:
+                failures += 1
+                print("FAIL %s: expected no flags, got:" % name)
+                for f in got:
+                    print("  " + fmt(f, tdir))
+            else:
+                print("ok   %s: no flags" % name)
+            continue
+        missing = [w for w in want if not any(f["rule"] == w["rule"] and w["text"] in f["text"] for f in got)]
+        if missing:
+            failures += 1
+            print("FAIL %s: missing %s" % (name, ", ".join("%s on \"%s\"" % (m["rule"], m["text"]) for m in missing)))
+        else:
+            print("ok   %s: %d expected flag(s) found (%d total)" % (name, len(want), len(got)))
+    print("selftest %s" % ("passed" if not failures else "FAILED: %d file(s)" % failures))
+    return 1 if failures else 0
+
+
+def main(argv):
+    ap = argparse.ArgumentParser(prog="ui-standards")
+    sub = ap.add_subparsers(dest="cmd")
+    c = sub.add_parser("check")
+    c.add_argument("paths", nargs="+")
+    c.add_argument("--ignore-rule", action="append", choices=RULES)
+    c.add_argument("--only")
+    c.add_argument("--json", action="store_true")
+    fl = sub.add_parser("flags")
+    fl.add_argument("--session")
+    w = sub.add_parser("waive")
+    w.add_argument("ids", nargs="+", metavar="ID")
+    w.add_argument("--reason", required=True)
+    r = sub.add_parser("render")
+    r.add_argument("target", metavar="FILE|URL")
+    r.add_argument("--out")
+    r.add_argument("--wait", type=int, default=0, help="extra milliseconds to wait after load")
+    r.add_argument("--session")
+    sub.add_parser("selftest")
+    h = sub.add_parser("hook")
+    h.add_argument("event", choices=["session", "pre", "post", "stop"])
+    args = ap.parse_args(argv)
+    if args.cmd == "hook":
+        try:
+            data = json.load(sys.stdin)
+        except Exception:
+            return 0
+        try:
+            return {"session": hook_session, "pre": hook_pre, "post": hook_post, "stop": hook_stop}[args.event](data)
+        except Exception as e:  # a broken checker must never break the session
+            print("ui-standards hook error: %s" % e, file=sys.stderr)
+            return 0
+    if args.cmd == "check":
+        return cmd_check(args)
+    if args.cmd == "render":
+        return cmd_render(args)
+    if args.cmd == "flags":
+        return cmd_flags(args)
+    if args.cmd == "waive":
+        return cmd_waive(args)
+    if args.cmd == "selftest":
+        return cmd_selftest(args)
+    ap.print_help()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

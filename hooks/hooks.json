@@ -1,17 +1,17 @@
 {
-  "description": "ui-text: adds the UI text rule at session start, refuses the first UI edit until the skill is loaded, checks changed UI strings after each edit, and blocks the stop once while flags are open.",
+  "description": "ui-standards: adds the UI text and layout rules at session start, refuses the first UI edit until both skills are loaded, checks what each edit changed, and blocks the stop once while problems are open.",
   "hooks": {
     "SessionStart": [
-      {"hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/skills/ui-text/bin/ui-text\" hook session", "timeout": 10}]}
+      {"hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/skills/ui-text/bin/ui-standards\" hook session", "timeout": 10}]}
     ],
     "PreToolUse": [
-      {"matcher": "Edit|Write", "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/skills/ui-text/bin/ui-text\" hook pre", "timeout": 10}]}
+      {"matcher": "Edit|Write", "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/skills/ui-text/bin/ui-standards\" hook pre", "timeout": 10}]}
     ],
     "PostToolUse": [
-      {"matcher": "Edit|Write", "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/skills/ui-text/bin/ui-text\" hook post", "timeout": 10}]}
+      {"matcher": "Edit|Write", "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/skills/ui-text/bin/ui-standards\" hook post", "timeout": 15}]}
     ],
     "Stop": [
-      {"hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/skills/ui-text/bin/ui-text\" hook stop", "timeout": 10}]}
+      {"hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/skills/ui-text/bin/ui-standards\" hook stop", "timeout": 15}]}
     ]
   }
 }

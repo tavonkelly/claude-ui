@@ -1,16 +1,16 @@
 {
   "hooks": {
     "SessionStart": [
-      {"hooks": [{"type": "command", "command": "python3 \"$HOME/.codex/skills/ui-text/bin/ui-text\" hook session", "timeout": 10}]}
+      {"hooks": [{"type": "command", "command": "python3 \"$HOME/.codex/skills/ui-text/bin/ui-standards\" hook session", "timeout": 10}]}
     ],
     "PreToolUse": [
-      {"hooks": [{"type": "command", "command": "python3 \"$HOME/.codex/skills/ui-text/bin/ui-text\" hook pre", "timeout": 10}]}
+      {"hooks": [{"type": "command", "command": "python3 \"$HOME/.codex/skills/ui-text/bin/ui-standards\" hook pre", "timeout": 10}]}
     ],
     "PostToolUse": [
-      {"hooks": [{"type": "command", "command": "python3 \"$HOME/.codex/skills/ui-text/bin/ui-text\" hook post", "timeout": 10}]}
+      {"hooks": [{"type": "command", "command": "python3 \"$HOME/.codex/skills/ui-text/bin/ui-standards\" hook post", "timeout": 15}]}
     ],
     "Stop": [
-      {"hooks": [{"type": "command", "command": "python3 \"$HOME/.codex/skills/ui-text/bin/ui-text\" hook stop", "timeout": 10}]}
+      {"hooks": [{"type": "command", "command": "python3 \"$HOME/.codex/skills/ui-text/bin/ui-standards\" hook stop", "timeout": 15}]}
     ]
   }
 }

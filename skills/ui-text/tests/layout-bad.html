@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+<title>Layout cases</title>
+<style>
+  body { font-size: 15px; font-weight: 400; }
+  .card { border: 1px solid #ddd; border-radius: 8px; padding: 16px; }
+  .panel { border: 1px solid #ddd; padding: 24px; }
+  .wrap { padding: 13px 16px; gap: 10px; }
+  h1 { font-size: 40px; font-weight: 800; }
+  h2 { font-size: 24px; font-weight: 600; }
+  .small { font-size: 12px; }
+  .tiny { font-size: 11px; }
+  .big { font-size: 48px; }
+  .eyebrow { text-transform: uppercase; letter-spacing: 0.1em; }
+  .glow { background: linear-gradient(90deg, #a855f7, #3b82f6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .note { border-left: 4px solid #a855f7; border-radius: 8px; padding: 16px; }
+  .btn-primary { background: #2f5bd3; color: #fff; }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <span class="badge">New</span>
+  <h1 class="glow">Reports</h1>
+  <h1>Archive</h1>
+  <h4>Filters</h4>
+  <div class="panel">
+    <div class="card"><h3>Owner</h3><p>Maya Chen</p></div>
+  </div>
+  <div class="card"><button class="btn-primary">Delete account</button></div>
+  <button class="btn-primary">Start trial</button>
+  <div class="stats">
+    <div class="stat"><b>1,204</b><span>Reports</span></div>
+    <div class="stat"><b>98%</b><span>On time</span></div>
+    <div class="stat"><b>3.2s</b><span>Median</span></div>
+  </div>
+  <div class="features">
+    <div class="card"><svg width="16" height="16"></svg><h3>Fast</h3><p>Builds in seconds from any source.</p></div>
+    <div class="card"><svg width="16" height="16"></svg><h3>Shared</h3><p>One link for the whole team.</p></div>
+    <div class="card"><svg width="16" height="16"></svg><h3>Exact</h3><p>Every number traced to its row.</p></div>
+  </div>
+  <p class="eyebrow">Pricing</p>
+  <h2>Plans</h2>
+  <p class="eyebrow">Teams</p>
+  <h2>Seats</h2>
+  <nav><a href="#">🚀 Launch</a></nav>
+  <div class="note">Draft</div>
+  <section class="cta"><h2>Start a trial</h2><a class="btn-primary" href="#">Start trial</a></section>
+  <section class="cta"><h2>Start a trial</h2><a class="btn-primary" href="#">Start trial</a></section>
+  <div><div><div><div><div><div><div><div><div><p>Deep</p></div></div></div></div></div></div></div></div></div>
+</main>
+</body>
+</html>

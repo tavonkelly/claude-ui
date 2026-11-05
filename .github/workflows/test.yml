@@ -11,6 +11,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python }}
-      - run: python skills/ui-text/bin/ui-text selftest
+      - run: python skills/ui-text/bin/ui-standards selftest
       - run: python skills/ui-text/tests/test_hooks.py
-      - run: python skills/ui-text/bin/ui-text check examples
+      - run: python skills/ui-text/tests/test_render.py
+      - run: python skills/ui-text/bin/ui-standards check examples

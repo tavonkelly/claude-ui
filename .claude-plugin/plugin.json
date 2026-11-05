@@ -1,13 +1,13 @@
 {
-  "name": "ui-text",
-  "version": "1.0.0",
-  "description": "A standard for UI text and a checker that flags explanatory, prose-like strings in the UI code an agent writes.",
+  "name": "ui-standards",
+  "version": "2.0.0",
+  "description": "Standards for UI text and layout, with a checker that flags prose-like strings, nested cards, extra primary actions and off-scale spacing in the UI code an agent writes.",
   "author": {
     "name": "Tavon Kelly",
     "url": "https://github.com/tavonkelly"
   },
-  "homepage": "https://github.com/tavonkelly/claude-ui-text",
-  "repository": "https://github.com/tavonkelly/claude-ui-text",
+  "homepage": "https://github.com/tavonkelly/claude-ui",
+  "repository": "https://github.com/tavonkelly/claude-ui",
   "license": "MIT",
-  "keywords": ["ui", "ux-writing", "microcopy", "content-design", "accessibility", "hooks", "skills"]
+  "keywords": ["ui", "ux", "layout", "ux-writing", "microcopy", "content-design", "accessibility", "hooks", "skills"]
 }

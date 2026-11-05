@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<title>Settings</title>
+<style>
+  :root { --fg: #1d1f21; --muted: #5b6168; --line: #dcdcd6; --accent: #2f5bd3; }
+  [hidden] { display: none !important; }
+  body { margin: 0; color: var(--fg); font: 16px/1.5 system-ui, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; display: grid; gap: 32px; }
+  h1 { font-size: 24px; margin: 0; }
+  h2 { font-size: 18px; margin: 0; }
+  section { display: grid; gap: 16px; padding-top: 24px; border-top: 1px solid var(--line); }
+  .field { display: grid; gap: 4px; max-width: 320px; }
+  .hint { font-size: 14px; color: var(--muted); }
+  button { font: inherit; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--line); background: none; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Settings</h1>
+  <section aria-labelledby="h-profile">
+    <h2 id="h-profile">Profile</h2>
+    <div class="field">
+      <label for="name">Name:</label>
+      <input id="name" value="Maya Chen">
+    </div>
+    <div class="field">
+      <label for="tz">Time zone:</label>
+      <select id="tz"><option>Pacific Time</option><option>Eastern Time</option></select>
+    </div>
+  </section>
+  <section aria-labelledby="h-account">
+    <h2 id="h-account">Account</h2>
+    <p class="hint">Last sign-in 2 hours ago</p>
+    <div class="row"><button type="button">Sign out</button><button type="button">Delete account</button></div>
+  </section>
+  <div class="row"><button type="button" class="primary">Save changes</button></div>
+</main>
+</body>
+</html>

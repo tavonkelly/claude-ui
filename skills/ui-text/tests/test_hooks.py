@@ -6,9 +6,11 @@ import subprocess
 import sys
 import tempfile
 
-BIN = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "bin", "ui-text")
-TMP = tempfile.mkdtemp(prefix="ui-text-test-")
-ENV = dict(os.environ, UI_TEXT_STATE=os.path.join(TMP, "state"))
+BIN = os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(__file__))), "bin", "ui-standards")
+TMP = tempfile.mkdtemp(prefix="ui-standards-test-")
+ENV = dict(os.environ, UI_STANDARDS_STATE=os.path.join(TMP, "state"))
+ENV.pop("CLAUDE_CODE_SESSION_ID", None)
+BOTH = '{"input":{"skill":"ui-text"}}\n{"input":{"skill":"ui-layout"}}'
 BAD_OLD = "<p>This page lets you see every report that was made by your team last month.</p>"
 BAD_NEW = "<p>Here you can simply manage how and when the reports get sent to you.</p>"
 failures = []
@@ -51,7 +53,7 @@ base = "<h1>Reports</h1>\n" + BAD_OLD + "\n<button>Save</button>\n"
 
 # Session rule
 out = hook("session", {"session_id": "s0", "hook_event_name": "SessionStart"})
-check("session hook adds the rule", "load the ui-text skill" in context(out), out)
+check("session hook adds both rules", "load the ui-text skill" in context(out) and "load the ui-layout skill" in context(out), out)
 
 # Claude Code: gate, then only changed strings
 write(page, base)
@@ -65,9 +67,13 @@ ctx = context(hook("post", edit))
 check("Claude Edit flags the new string", "Here you can simply" in ctx, ctx)
 check("Claude Edit skips strings that were already there", "This page lets you" not in ctx, ctx)
 
-for name, line in [("Skill tool", '{"input":{"skill":"ui-text"}}'),
-                   ("plugin skill", '{"input":{"skill":"ui-text:ui-text"}}'),
-                   ("skill read", '"Base directory for this skill: /x/plugins/cache/claude-ui-text/ui-text/1.0.0/skills/ui-text"')]:
+p = {"session_id": "half-loaded", "tool_name": "Write", "cwd": TMP, "transcript_path": loaded_transcript('{"input":{"skill":"ui-text"}}'),
+     "tool_input": {"file_path": page, "content": base}}
+check("gate refuses when only ui-text is loaded", denied(hook("pre", p)))
+for name, line in [("Skill tool", BOTH),
+                   ("plugin skill", '{"input":{"skill":"ui-standards:ui-text"}}\n{"input":{"skill":"ui-standards:ui-layout"}}'),
+                   ("skill read", '"Base directory for this skill: /x/plugins/cache/claude-ui/ui-standards/2.0.0/skills/ui-text"\n'
+                                  '"Base directory for this skill: /x/plugins/cache/claude-ui/ui-standards/2.0.0/skills/ui-layout"')]:
     p = {"session_id": "loaded-" + name, "tool_name": "Write", "cwd": TMP, "transcript_path": loaded_transcript(line),
          "tool_input": {"file_path": page, "content": base}}
     check("gate passes after %s" % name, not denied(hook("pre", p)))
@@ -98,11 +104,21 @@ wv = dict(edit, session_id="claude-waive", tool_use_id="w1", skill_loaded=True)
 hook("pre", wv)
 write(page, base.replace("<button>Save</button>", BAD_NEW + "\n<button>Save</button>"))
 ctx = context(hook("post", wv))
-ids = [l.split()[0] for l in ctx.split("\n") if l[:1] == "U"]
+ids = [l.split()[0] for l in ctx.split("\n") if l[:1] in "ULR" and l[1:7].isalnum() and len(l.split()[0]) == 7]
 r = subprocess.run([sys.executable, BIN, "waive"] + ids + ["--reason", "test"], capture_output=True, text=True, env=ENV)
 check("waive accepts the flag id", r.returncode == 0, r.stderr)
 out = hook("stop", {"session_id": "claude-waive", "cwd": TMP})
 check("stop lets waived flags through", out.get("decision") != "block", out)
+
+# check run inside a session prints ids that waive accepts, including old strings no hook flagged
+r = subprocess.run([sys.executable, BIN, "check", page], capture_output=True, text=True,
+                   env=dict(ENV, CLAUDE_CODE_SESSION_ID="claude-waive"))
+old_ids = [l.split()[0] for l in r.stdout.splitlines() if "This page lets you" in l]
+check("check in a session reuses the hook's ids", bool(ids) and any(i in ids for i in [l.split()[0] for l in r.stdout.splitlines() if l[:1] == "U"]), r.stdout)
+r = subprocess.run([sys.executable, BIN, "waive"] + old_ids + ["--reason", "test"], capture_output=True, text=True, env=ENV)
+check("waive accepts an id that only check printed", bool(old_ids) and r.returncode == 0, r.stdout + r.stderr)
+out = hook("stop", {"session_id": "claude-waive", "cwd": TMP})
+check("flags listed by check don't block the stop", out.get("decision") != "block", out)
 
 # Codex: apply_patch text, in each shape the payload may take
 patch = ("*** Begin Patch\n*** Update File: page.html\n@@\n <h1>Reports</h1>\n " + BAD_OLD +
@@ -147,6 +163,51 @@ py = os.path.join(TMP, "x.py")
 write(py, "msg = 'Here you can simply manage how and when the reports get sent to you.'\n")
 p = {"session_id": "claude", "tool_name": "Write", "cwd": TMP, "tool_input": {"file_path": py, "content": ""}}
 check("non-UI files are ignored", hook("pre", p) == {} and hook("post", p) == {})
+
+# Layout: new problems block, advice doesn't, old problems stay quiet
+CSS = "<style>.card{border:1px solid #ddd;border-radius:8px;padding:16px}</style>\n"
+lay = os.path.join(TMP, "lay.html")
+lay_base = CSS + "<main><h1>Billing</h1><div class=\"card\"><h2>Plan</h2><p>Team, 12 seats</p></div></main>\n"
+nested = lay_base.replace("<p>Team, 12 seats</p>", "<p>Team, 12 seats</p><div class=\"card\"><p>Invoices</p><p>3 this year</p></div>")
+write(lay, lay_base)
+le = {"session_id": "layout", "tool_name": "Edit", "cwd": TMP, "tool_use_id": "l1", "skill_loaded": True,
+      "tool_input": {"file_path": lay, "old_string": "<p>Team, 12 seats</p>", "new_string": "<p>Team, 12 seats</p><div class=\"card\"><p>Invoices</p><p>3 this year</p></div>"}}
+hook("pre", le)
+write(lay, nested)
+ctx = context(hook("post", le))
+check("layout edit flags a nested card as a problem", "[nested-card]" in ctx and "found 1 problem" in ctx, ctx)
+out = hook("stop", {"session_id": "layout", "cwd": TMP})
+check("stop blocks on an open layout problem", out.get("decision") == "block" and "nested-card" in out.get("reason", ""), out)
+write(lay, lay_base)
+out = hook("stop", {"session_id": "layout", "cwd": TMP})
+check("stop passes once the nested card is gone", out.get("decision") != "block", out)
+
+write(lay, nested)
+le2 = dict(le, session_id="layout-old", tool_use_id="l2",
+           tool_input={"file_path": lay, "old_string": "<h1>Billing</h1>", "new_string": "<h1>Plan and billing</h1>"})
+hook("pre", le2)
+write(lay, nested.replace("<h1>Billing</h1>", "<h1>Plan and billing</h1>"))
+ctx = context(hook("post", le2))
+check("an edit elsewhere leaves an old nested card quiet", "nested-card" not in ctx, ctx)
+
+tiles = "".join("<div class=\"tile\"><b>%s</b><span>%s</span></div>" % kv for kv in [("12", "Seats"), ("98%", "Uptime"), ("3", "Invoices")])
+write(lay, lay_base)
+le3 = dict(le, session_id="layout-advice", tool_use_id="l3",
+           tool_input={"file_path": lay, "old_string": "</main>", "new_string": "<div>" + tiles + "</div></main>"})
+hook("pre", le3)
+write(lay, lay_base.replace("</main>", "<div>" + tiles + "</div></main>"))
+ctx = context(hook("post", le3))
+check("stat tiles come back as advice", "advice on your edit" in ctx and "[stat-tiles]" in ctx and "problem" not in ctx, ctx)
+out = hook("stop", {"session_id": "layout-advice", "cwd": TMP})
+check("advice doesn't block the stop", out.get("decision") != "block", out)
+
+css = os.path.join(TMP, "site.css")
+write(css, ".a { padding: 8px; }\n")
+ce = {"session_id": "layout-css", "tool_name": "Write", "cwd": TMP, "skill_loaded": True, "tool_input": {"file_path": css, "content": ""}}
+hook("pre", ce)
+write(css, ".a { padding: 8px; }\n.b { margin: 0 0 13px; }\n")
+ctx = context(hook("post", ce))
+check("CSS edits are checked for spacing", "[off-scale-spacing]" in ctx and "13px" in ctx and ".a" not in ctx.split("13px")[0][-40:], ctx)
 
 print("hook tests %s" % ("passed" if not failures else "FAILED: %d" % len(failures)))
 sys.exit(1 if failures else 0)

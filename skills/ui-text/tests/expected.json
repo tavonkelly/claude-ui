@@ -1,173 +1,337 @@
 {
-  "bad.html": [
-    {
-      "rule": "long-text",
-      "text": "Short reports, each built"
-    },
-    {
-      "rule": "multi-sentence",
-      "text": "Short reports, each built"
-    },
-    {
-      "rule": "phrase",
-      "text": "Under the hood"
-    },
-    {
-      "rule": "instruction-label",
-      "text": "Enter your email address"
-    },
-    {
-      "rule": "generic-button",
-      "text": "Submit"
-    },
-    {
-      "rule": "generic-button",
-      "text": "OK"
-    },
-    {
-      "rule": "long-label",
-      "text": "Save all of my current changes now"
-    },
-    {
-      "rule": "long-text",
-      "text": "How quickly and how well"
-    },
-    {
-      "rule": "long-text",
-      "text": "After each change to the service"
-    },
-    {
-      "rule": "long-text",
-      "text": "The app shows a page only once"
-    },
-    {
-      "rule": "multi-sentence",
-      "text": "The app shows a page only once"
-    },
-    {
-      "rule": "phrase",
-      "text": "The question this page answers"
-    },
-    {
-      "rule": "phrase",
-      "text": "Please wait while we load"
-    },
-    {
-      "rule": "long-label",
-      "text": "What would you like to do"
-    }
-  ],
-  "good.html": [],
-  "bad.tsx": [
-    {
-      "rule": "long-label",
-      "text": "Here you can manage"
-    },
-    {
-      "rule": "phrase",
-      "text": "Here you can manage"
-    },
-    {
-      "rule": "long-text",
-      "text": "This dashboard shows"
-    },
-    {
-      "rule": "phrase",
-      "text": "This dashboard shows"
-    },
-    {
-      "rule": "generic-button",
-      "text": "Yes"
-    },
-    {
-      "rule": "phrase",
-      "text": "Simply type a name"
-    },
-    {
-      "rule": "phrase",
-      "text": "Click here to see"
-    },
-    {
-      "rule": "multi-sentence",
-      "text": "It looks like this folder is empty"
-    }
-  ],
-  "good.tsx": [],
-  "bad.dart": [
-    {
-      "rule": "long-text",
-      "text": "Welcome! This screen"
-    },
-    {
-      "rule": "phrase",
-      "text": "Welcome! This screen"
-    },
-    {
-      "rule": "instruction-label",
-      "text": "Enter your email"
-    },
-    {
-      "rule": "phrase",
-      "text": "Please use your work address"
-    },
-    {
-      "rule": "generic-button",
-      "text": "Submit"
-    },
-    {
-      "rule": "phrase",
-      "text": "Oops, something went wrong"
-    }
-  ],
-  "good.dart": [],
-  "bad.swift": [
-    {
-      "rule": "long-label",
-      "text": "Here you can change"
-    },
-    {
-      "rule": "phrase",
-      "text": "Here you can change"
-    },
-    {
-      "rule": "long-label",
-      "text": "Send me an email every time"
-    },
-    {
-      "rule": "generic-button",
-      "text": "OK"
-    },
-    {
-      "rule": "multi-sentence",
-      "text": "Thank you for using our app"
-    },
-    {
-      "rule": "phrase",
-      "text": "Thank you for using our app"
-    },
-    {
-      "rule": "long-label",
-      "text": "Your Account Settings Page Overview"
-    }
-  ],
-  "good.swift": [],
-  "bad.vue": [
-    {
-      "rule": "long-text",
-      "text": "Use this page to configure"
-    },
-    {
-      "rule": "phrase",
-      "text": "Use this page to configure"
-    },
-    {
-      "rule": "generic-button",
-      "text": "Yes"
-    },
-    {
-      "rule": "phrase",
-      "text": "Simply drag files here"
-    }
-  ],
-  "good.svelte": []
+ "bad.html": [
+  {
+   "rule": "long-text",
+   "text": "Short reports, each built"
+  },
+  {
+   "rule": "multi-sentence",
+   "text": "Short reports, each built"
+  },
+  {
+   "rule": "phrase",
+   "text": "Under the hood"
+  },
+  {
+   "rule": "instruction-label",
+   "text": "Enter your email address"
+  },
+  {
+   "rule": "generic-button",
+   "text": "Submit"
+  },
+  {
+   "rule": "generic-button",
+   "text": "OK"
+  },
+  {
+   "rule": "long-label",
+   "text": "Save all of my current changes now"
+  },
+  {
+   "rule": "long-text",
+   "text": "How quickly and how well"
+  },
+  {
+   "rule": "long-text",
+   "text": "After each change to the service"
+  },
+  {
+   "rule": "long-text",
+   "text": "The app shows a page only once"
+  },
+  {
+   "rule": "multi-sentence",
+   "text": "The app shows a page only once"
+  },
+  {
+   "rule": "phrase",
+   "text": "The question this page answers"
+  },
+  {
+   "rule": "phrase",
+   "text": "Please wait while we load"
+  },
+  {
+   "rule": "long-label",
+   "text": "What would you like to do"
+  }
+ ],
+ "good.html": [],
+ "bad.tsx": [
+  {
+   "rule": "long-label",
+   "text": "Here you can manage"
+  },
+  {
+   "rule": "phrase",
+   "text": "Here you can manage"
+  },
+  {
+   "rule": "long-text",
+   "text": "This dashboard shows"
+  },
+  {
+   "rule": "phrase",
+   "text": "This dashboard shows"
+  },
+  {
+   "rule": "generic-button",
+   "text": "Yes"
+  },
+  {
+   "rule": "phrase",
+   "text": "Simply type a name"
+  },
+  {
+   "rule": "phrase",
+   "text": "Click here to see"
+  },
+  {
+   "rule": "multi-sentence",
+   "text": "It looks like this folder is empty"
+  }
+ ],
+ "good.tsx": [],
+ "bad.dart": [
+  {
+   "rule": "long-text",
+   "text": "Welcome! This screen"
+  },
+  {
+   "rule": "phrase",
+   "text": "Welcome! This screen"
+  },
+  {
+   "rule": "instruction-label",
+   "text": "Enter your email"
+  },
+  {
+   "rule": "phrase",
+   "text": "Please use your work address"
+  },
+  {
+   "rule": "generic-button",
+   "text": "Submit"
+  },
+  {
+   "rule": "phrase",
+   "text": "Oops, something went wrong"
+  }
+ ],
+ "good.dart": [],
+ "bad.swift": [
+  {
+   "rule": "long-label",
+   "text": "Here you can change"
+  },
+  {
+   "rule": "phrase",
+   "text": "Here you can change"
+  },
+  {
+   "rule": "long-label",
+   "text": "Send me an email every time"
+  },
+  {
+   "rule": "generic-button",
+   "text": "OK"
+  },
+  {
+   "rule": "multi-sentence",
+   "text": "Thank you for using our app"
+  },
+  {
+   "rule": "phrase",
+   "text": "Thank you for using our app"
+  },
+  {
+   "rule": "long-label",
+   "text": "Your Account Settings Page Overview"
+  }
+ ],
+ "good.swift": [],
+ "bad.vue": [
+  {
+   "rule": "long-text",
+   "text": "Use this page to configure"
+  },
+  {
+   "rule": "phrase",
+   "text": "Use this page to configure"
+  },
+  {
+   "rule": "generic-button",
+   "text": "Yes"
+  },
+  {
+   "rule": "phrase",
+   "text": "Simply drag files here"
+  }
+ ],
+ "good.svelte": [],
+ "layout-bad.html": [
+  {
+   "rule": "nested-card",
+   "text": "div.card inside div.panel"
+  },
+  {
+   "rule": "single-control-card",
+   "text": "holds one control"
+  },
+  {
+   "rule": "multiple-primary",
+   "text": "4 primary actions"
+  },
+  {
+   "rule": "heading-skip",
+   "text": "follows an h1"
+  },
+  {
+   "rule": "heading-skip",
+   "text": "2 h1 headings"
+  },
+  {
+   "rule": "off-scale-spacing",
+   "text": "13px"
+  },
+  {
+   "rule": "off-scale-spacing",
+   "text": "gap: 10px"
+  },
+  {
+   "rule": "stat-tiles",
+   "text": "3 stat tiles"
+  },
+  {
+   "rule": "card-grid",
+   "text": "3 icon cards"
+  },
+  {
+   "rule": "badge-above-h1",
+   "text": "New"
+  },
+  {
+   "rule": "eyebrow",
+   "text": "Pricing"
+  },
+  {
+   "rule": "emoji-icon",
+   "text": "Launch"
+  },
+  {
+   "rule": "repeated-cta",
+   "text": "Start a trial"
+  },
+  {
+   "rule": "deep-nesting",
+   "text": "levels deep"
+  },
+  {
+   "rule": "gradient-text",
+   "text": ".glow"
+  },
+  {
+   "rule": "accent-stripe",
+   "text": ".note"
+  },
+  {
+   "rule": "type-scale",
+   "text": "6 font sizes"
+  },
+  {
+   "rule": "type-scale",
+   "text": "3 font weights"
+  }
+ ],
+ "layout-good.html": [],
+ "layout-bad.tsx": [
+  {
+   "rule": "nested-card",
+   "text": "Card inside Card"
+  },
+  {
+   "rule": "nested-card",
+   "text": "div.rounded-md.border inside div.rounded-lg.border"
+  },
+  {
+   "rule": "off-scale-spacing",
+   "text": "p-[13px]"
+  },
+  {
+   "rule": "off-scale-spacing",
+   "text": "padding: 10px"
+  },
+  {
+   "rule": "multiple-primary",
+   "text": "Upgrade"
+  },
+  {
+   "rule": "gradient-text",
+   "text": "h1"
+  },
+  {
+   "rule": "accent-stripe",
+   "text": "border-l-4"
+  }
+ ],
+ "layout-good.tsx": [],
+ "layout-bad.css": [
+  {
+   "rule": "off-scale-spacing",
+   "text": "18px"
+  },
+  {
+   "rule": "off-scale-spacing",
+   "text": "0.3rem"
+  },
+  {
+   "rule": "gradient-text",
+   "text": ".hero-title"
+  },
+  {
+   "rule": "accent-stripe",
+   "text": ".notice-card"
+  },
+  {
+   "rule": "type-scale",
+   "text": "5 font sizes"
+  },
+  {
+   "rule": "type-scale",
+   "text": "3 font weights"
+  }
+ ],
+ "layout-bad.dart": [
+  {
+   "rule": "nested-card",
+   "text": "inside the card"
+  },
+  {
+   "rule": "off-scale-spacing",
+   "text": "13px"
+  },
+  {
+   "rule": "multiple-primary",
+   "text": "2 primary buttons"
+  }
+ ],
+ "layout-bad.swift": [
+  {
+   "rule": "nested-card",
+   "text": "inside the card"
+  },
+  {
+   "rule": "off-scale-spacing",
+   "text": ".padding"
+  },
+  {
+   "rule": "off-scale-spacing",
+   "text": "stack spacing"
+  },
+  {
+   "rule": "multiple-primary",
+   "text": "2 primary buttons"
+  }
+ ]
 }
